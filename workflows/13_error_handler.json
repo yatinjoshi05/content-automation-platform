@@ -1,0 +1,98 @@
+{
+  "id": "cawf130000000000",
+  "name": "CA 13 Error Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "Set THIS workflow as the 'Error Workflow' (Workflow settings) of every other CA workflow. Normalizes, redacts secrets, persists to errors, and raises a deduplicated CRITICAL notification.",
+        "height": 140,
+        "width": 640
+      },
+      "id": "375a5783-4bae-5668-a0b4-b13aafff21c7",
+      "name": "Read me",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -360
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "b4a03705-89c1-5d52-a43a-b20091b66977",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = $input.first().json; const msg = String(e.execution?.error?.message || 'unknown error');\nconst redact = s => String(s).replace(/(api[_-]?key|key|token|secret|authorization|bearer|password)[\"'=: ]+[A-Za-z0-9._\\-]{8,}/gi, '$1=[redacted]').slice(0, 900);\nlet category = 'UNKNOWN'; if (/VALIDATION:/.test(msg)) category = 'VALIDATION'; else if (/RIGHTS:/.test(msg)) category = 'RIGHTS'; else if (/401|403|unauthori|token|credential/i.test(msg)) category = 'AUTH';\nelse if (/429|quota|rate/i.test(msg)) category = 'RATE_LIMIT'; else if (/ECONN|ETIMEDOUT|timeout|5\\d\\d/i.test(msg)) category = 'TRANSIENT';\nconst severity = ['AUTH', 'RIGHTS', 'POLICY'].includes(category) ? 'critical' : (category === 'UNKNOWN' ? 'error' : 'warning');\nreturn [{ json: { category, severity, retryable: ['TRANSIENT', 'RATE_LIMIT', 'UNKNOWN'].includes(category), workflow: e.workflow?.name || 'unknown', node: e.execution?.lastNodeExecuted || null, message: redact(msg), execution_id: e.execution?.id || null } }];"
+      },
+      "id": "d2298e81-b2bb-549b-a504-fe508e7b2f1c",
+      "name": "Normalize Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH e AS (INSERT INTO errors(category, severity, retryable, workflow, node, message, details) VALUES ($1, $2, $3::boolean, $4, $5, $6, jsonb_build_object('execution_id', $7::text)) RETURNING id) SELECT ca_notify(CASE WHEN $2 = 'critical' THEN 'CRITICAL' ELSE 'INFO' END, 'error', 'Workflow error: ' || $4 || ' / ' || COALESCE($5,'?') || ' (' || $1 || ')', $6, 'err:' || $4 || ':' || COALESCE($5,'') || ':' || $1 || ':' || to_char(now(),'YYYYMMDDHH24'), NULL, NULL) FROM e",
+        "options": {
+          "queryReplacement": "={{ [$json.category, $json.severity, $json.retryable, $json.workflow, $json.node, $json.message, $json.execution_id] }}"
+        }
+      },
+      "id": "cacd3ec3-47a3-5854-87f7-307a14f2288a",
+      "name": "Persist Error + Notify",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Error": {
+      "main": [
+        [
+          {
+            "node": "Persist Error + Notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "note": "Credentials are NOT embedded. After import, open each node showing a credential warning and select your own credential (see SETUP.md)."
+  }
+}

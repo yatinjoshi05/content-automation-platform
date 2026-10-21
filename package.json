@@ -1,0 +1,16 @@
+{
+  "name": "content-automation",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Content Automation Platform - Modular n8n workflows, CoreUI React operations dashboard, and automated worker pipeline",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "build:frontend": "node frontend/build.js",
+    "test": "node scripts/run_all_tests.js",
+    "start:server": "node server/index.js",
+    "start:worker": "node workers/original_generator.js",
+    "sync:credentials": "node scripts/sync_n8n_credentials.js"
+  }
+}

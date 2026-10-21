@@ -1,0 +1,708 @@
+{
+  "id": "cawf070000000000",
+  "name": "CA 07 Content Packaging And QA",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ca-w-packaging",
+        "responseMode": "onReceived",
+        "options": {},
+        "authentication": "headerAuth"
+      },
+      "id": "8b39f658-b8ba-5d07-bc8e-d8a4969fe2c0",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "5932406f-d024-57c0-90e1-c322b66fc08c"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT j.job_id, j.job_type, j.entity_id, j.correlation_id, j.payload, j.attempt, ch.id AS channel_id, ch.name AS channel_name, ch.platforms, ch.clip_min_seconds, ch.clip_max_seconds, ch.rules, ch.timezone, ch.quality_threshold, n.name AS niche_name, n.keywords FROM jobs j LEFT JOIN channels ch ON ch.id = NULLIF(j.payload->>'channel_id','')::uuid LEFT JOIN niches n ON n.id = ch.niche_id WHERE j.job_id = $1::uuid AND j.status = 'running'",
+        "options": {
+          "queryReplacement": "={{ [$('Webhook').first().json.body.job_id] }}"
+        }
+      },
+      "id": "dc296646-b59a-5f40-85ce-271e5691a34d",
+      "name": "Load Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT cl.clip_id, cl.title, cl.hook, cl.duration, cl.video_url, s.title AS source_title, s.creator, p.attribution_required, p.attribution_text, (SELECT COALESCE(jsonb_agg(t), '[]'::jsonb) FROM (SELECT cv.per_platform->'youtube'->>'title' AS t FROM content_versions cv JOIN content c2 ON c2.content_id = cv.content_id WHERE c2.channel_id = $2::uuid ORDER BY cv.created_at DESC LIMIT 200) x) AS recent_titles, ((ca_setting('max_hashtags','5'))#>>'{}')::int AS max_hashtags FROM clips cl JOIN sources s ON s.source_id = cl.source_id LEFT JOIN permissions p ON p.source_id = s.source_id AND p.status = 'active' WHERE cl.clip_id = $1::uuid",
+        "options": {
+          "queryReplacement": "={{ [$json.payload.clip_id, $json.channel_id] }}"
+        }
+      },
+      "id": "db1d69fe-4cb5-5257-8d85-8877a5c82079",
+      "name": "Clip Context",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const job = $('Load Job').first().json; const c = $input.first().json; const rules = job.rules || {};\nconst prompt = `Channel: ${job.channel_name} (niche: ${job.niche_name}). Platforms: ${job.platforms.join(', ')}.\\nClip title from engine: ${c.title}. Hook: ${c.hook || 'n/a'}. Duration: ${c.duration || 'n/a'}s. Source: ${c.source_title} by ${c.creator}.\\n` +\n `Rules: max ${c.max_hashtags} hashtags, no keyword stuffing, no clickbait lies, no claims of guaranteed results. Banned phrases: ${(rules.banned_phrases || []).join(', ') || 'none'}.\\n` +\n (job.payload.feedback ? `Human feedback to address: ${job.payload.feedback}\\n` : '') +\n `Write DIFFERENT metadata per platform (YouTube Shorts: searchable title <=90 chars; Instagram Reels: conversational caption; Facebook Reels: community-oriented).\\n` +\n `Return JSON {\"hook_text\":str,\"hook_strength\":0..1,\"per_platform\":{\"<platform>\":{\"title\":str,\"description\":str,\"hashtags\":[str]}}}.`;\nreturn [{ json: { prompt, system: 'You are a short-form social copywriter. Output valid JSON only. Honest, non-spammy.' } }];"
+      },
+      "id": "ab6f6fe8-d5c1-553e-99db-f76e3767565b",
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM ca_pick_model($1::text[], $2::boolean)",
+        "options": {
+          "queryReplacement": "={{ [[\"text\", \"json\"], !!$('Load Job').first().json.payload.use_fallback_provider] }}"
+        }
+      },
+      "id": "837cabfb-42ce-5b44-bae5-732c0578bb21",
+      "name": "Pick Model",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1040,
+        0
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "9bda2127-f054-562c-b055-bf155b3ea1d0",
+              "leftValue": "={{ !!$json.provider }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c5b413c5-6e03-5ece-9f8f-51fe84c6b799",
+      "name": "Model Available?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_fail($1::uuid, $2, $3)",
+        "options": {
+          "queryReplacement": "={{ [$('Load Job').first().json.job_id, 'RESOURCE', 'no enabled model provider is available (quota/circuit/config)'] }}"
+        }
+      },
+      "id": "c3e7e9c6-48bb-547a-9cb8-31ccd8589987",
+      "name": "No Model - Fail Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1560,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const m = $json; const p = $('Build Prompt').first().json;\nconst body = { system: p.system, prompt: p.prompt };\nreturn [{ json: { provider: m.provider, model: m.model, kind: m.kind, base_url: (m.base_url || '').replace(/\\/+$/, ''), body } }];"
+      },
+      "id": "ad1d343d-8ef9-51e8-9048-90570997ed1c",
+      "name": "Build LLM Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "0898bb43-d93f-5446-853a-fe337dfda5b0",
+              "leftValue": "={{ $json.kind === 'gemini' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9890153b-bebf-5bfd-aa16-318fa04c87a8",
+      "name": "Is Gemini?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1820,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "ef28f839-d0f7-5c53-877c-01a9cfb8565d",
+              "leftValue": "={{ $json.kind === 'openai_compat' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "94361e09-9e98-5c1f-a0dc-90cf88f2a0d1",
+      "name": "Is OpenAI-compatible?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2080,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.base_url }}/v1beta/models/{{ $json.model }}:generateContent",
+        "options": {
+          "timeout": 120000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: $json.body.system }] }, contents: [{ role: 'user', parts: [{ text: $json.body.prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.4 } }) }}"
+      },
+      "id": "2f458d63-4798-5d61-bd37-5ada101d1381",
+      "name": "Gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2080,
+        -180
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.base_url }}/chat/completions",
+        "options": {
+          "timeout": 120000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model, temperature: 0.4, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: $json.body.system }, { role: 'user', content: $json.body.prompt }] }) }}"
+      },
+      "id": "c44fe926-1700-5b43-98f7-fe492324d97f",
+      "name": "OpenAI-compatible (Groq etc.)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2340,
+        180
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.base_url }}/api/chat",
+        "options": {
+          "timeout": 600000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model, stream: false, format: 'json', options: { temperature: 0.4, num_ctx: 8192 }, messages: [{ role: 'system', content: $json.body.system }, { role: 'user', content: $json.body.prompt }] }) }}"
+      },
+      "id": "a6ebbe47-f51e-5073-97e0-ddb2719d7189",
+      "name": "Ollama (local)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2340,
+        360
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const meta = $('Build LLM Request').first().json; const r = $input.first().json;\nlet text = '';\nif (meta.kind === 'gemini') text = r.candidates?.[0]?.content?.parts?.map(p => p.text).join('') ?? '';\nelse if (meta.kind === 'openai_compat') text = r.choices?.[0]?.message?.content ?? '';\nelse text = r.message?.content ?? '';\ntext = String(text).replace(/^```json|```$/gim, '').trim();\nlet data; try { data = JSON.parse(text); } catch (e) { throw new Error('VALIDATION: model returned non-JSON output'); }\nreturn [{ json: { data, provider: meta.provider, model: meta.model } }];"
+      },
+      "id": "d769e72d-888b-55e6-aba5-bd60b6bfc4c2",
+      "name": "Parse LLM JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2600,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_model_result($1, true)",
+        "options": {
+          "queryReplacement": "={{ [$json.provider] }}"
+        }
+      },
+      "id": "6d6a547b-98c2-5a72-85fa-8b2d42cfaf09",
+      "name": "Record Model Success",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2860,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_model_result($1, false, $2) AS state, $2::text AS err",
+        "options": {
+          "queryReplacement": "={{ [$('Build LLM Request').first().json.provider, JSON.stringify($json.error ?? $json).slice(0, 300)] }}"
+        }
+      },
+      "id": "dfbebcdb-b9ee-5d91-83ff-847b6971ce23",
+      "name": "Record Model Failure",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2600,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize an error output into {job_id, category, message}. Secrets are redacted before anything is persisted.\nconst j = $input.first().json;\nconst jobId = $('Load Job').first().json.job_id;\nconst raw = JSON.stringify(j.error ?? j).slice(0, 700);\nconst m = raw.match(/\\b([45]\\d\\d)\\b/); const code = m ? +m[1] : 0;\nlet cat = 'UNKNOWN';\nif (/VALIDATION:/.test(raw)) cat = 'VALIDATION';\nelse if (/RIGHTS:/.test(raw)) cat = 'RIGHTS';\nelse if (code === 401 || code === 403 || /unauthori|invalid_grant|token (has )?expired|permission|credentials/i.test(raw)) cat = 'AUTH';\nelse if (code === 429 || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(raw)) cat = 'RATE_LIMIT';\nelse if (code >= 500 || /ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang|timed? ?out/i.test(raw)) cat = 'TRANSIENT';\nelse if (code >= 400) cat = 'VALIDATION';\nconst msg = raw.replace(/(api[_-]?key|key|token|secret|authorization|bearer)[\"'=: ]+[A-Za-z0-9._\\-]{8,}/gi, '$1=[redacted]');\nreturn [{ json: { job_id: jobId, category: cat, message: msg } }];"
+      },
+      "id": "5571792c-2327-574e-bbde-22c72bd4eec7",
+      "name": "Model Failure Classify",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_fail($1::uuid, $2, $3)",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id, $json.category, $json.message] }}"
+        }
+      },
+      "id": "6ca9efc7-0477-595f-9b5c-068b4f095846",
+      "name": "Model Failure Fail Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3120,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const job = $('Load Job').first().json; const c = $('Clip Context').first().json; const d = $('Parse LLM JSON').first().json.data; const rules = job.rules || {};\nconst banned = (rules.banned_phrases || []).map(s => s.toLowerCase()); const guar = /(guaranteed|100% safe|definitely safe|get rich)/i;\nconst recent = new Set((c.recent_titles || []).filter(Boolean).map(t => t.toLowerCase()));\nconst per = {}; let metaOk = true; const problems = [];\nfor (const p of job.platforms) {\n  const m = (d.per_platform || {})[p]; if (!m || !m.title) { metaOk = false; problems.push('missing ' + p); continue; }\n  let tags = (m.hashtags || []).map(h => '#' + String(h).replace(/^#+/, '').replace(/[^\\w]/g, '')).filter(h => h.length > 1);\n  tags = [...new Set(tags)].slice(0, c.max_hashtags);\n  let desc = String(m.description || '').slice(0, 2000);\n  if (c.attribution_required && c.attribution_text) desc += '\\n\\n' + c.attribution_text;            // attribution enforced deterministically\n  const title = String(m.title).slice(0, p === 'youtube' ? 95 : 150);\n  const txt = (title + ' ' + desc).toLowerCase();\n  if (banned.some(b => txt.includes(b)) || guar.test(txt)) { metaOk = false; problems.push('banned/guarantee phrase on ' + p); }\n  per[p] = { title, description: desc, hashtags: tags, caption: (title + '\\n\\n' + tags.join(' ')).slice(0, 2200) };\n}\nconst dur = Number(c.duration); const durOk = !dur || (dur >= job.clip_min_seconds && dur <= job.clip_max_seconds);\nconst unique = !per.youtube || !recent.has(per.youtube.title.toLowerCase());\nconst hook = Math.min(1, Math.max(0, Number(d.hook_strength) || 0));\nconst dims = [durOk ? 1 : 0, metaOk ? 1 : 0, unique ? 1 : 0, hook];\nconst score = +(dims.reduce((a, b) => a + b, 0) / dims.length).toFixed(3);\nconst qa = { duration_ok: durOk, metadata_valid: metaOk, unique_title: unique, hook_strength: hook, problems,\n  assessed: ['duration', 'metadata', 'uniqueness', 'hook (text-based)'], not_assessed: ['framing', 'audio quality', 'visual quality', 'subtitle quality', 'thumbnail'], visual_checked: false,\n  model: $('Parse LLM JSON').first().json.provider };\nreturn [{ json: { per, hook: String(d.hook_text || c.hook || '').slice(0, 200), qa, score } }];"
+      },
+      "id": "9c94dd83-65b2-5d29-9b2e-3776dd7a23f7",
+      "name": "Validate And QA",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2600,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_packaging_store($1::uuid, $2::jsonb, $3, $4::jsonb, $5::numeric) AS result",
+        "options": {
+          "queryReplacement": "={{ [$('Load Job').first().json.job_id, JSON.stringify($json.per), $json.hook, JSON.stringify($json.qa), $json.score] }}"
+        }
+      },
+      "id": "fce97e18-50cf-5e27-b989-9b684701c83b",
+      "name": "Store Version + Enqueue Approval",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2860,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize an error output into {job_id, category, message}. Secrets are redacted before anything is persisted.\nconst j = $input.first().json;\nconst jobId = $('Load Job').first().json.job_id;\nconst raw = JSON.stringify(j.error ?? j).slice(0, 700);\nconst m = raw.match(/\\b([45]\\d\\d)\\b/); const code = m ? +m[1] : 0;\nlet cat = 'UNKNOWN';\nif (/VALIDATION:/.test(raw)) cat = 'VALIDATION';\nelse if (/RIGHTS:/.test(raw)) cat = 'RIGHTS';\nelse if (code === 401 || code === 403 || /unauthori|invalid_grant|token (has )?expired|permission|credentials/i.test(raw)) cat = 'AUTH';\nelse if (code === 429 || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(raw)) cat = 'RATE_LIMIT';\nelse if (code >= 500 || /ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang|timed? ?out/i.test(raw)) cat = 'TRANSIENT';\nelse if (code >= 400) cat = 'VALIDATION';\nconst msg = raw.replace(/(api[_-]?key|key|token|secret|authorization|bearer)[\"'=: ]+[A-Za-z0-9._\\-]{8,}/gi, '$1=[redacted]');\nreturn [{ json: { job_id: jobId, category: cat, message: msg } }];"
+      },
+      "id": "e9fe2a3e-56ca-5ecd-9740-f228613c915f",
+      "name": "Code Error Classify Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3380,
+        1080
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_fail($1::uuid, $2, $3)",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id, $json.category, $json.message] }}"
+        }
+      },
+      "id": "ebaec79b-b207-59b8-b857-a3893e5fc63c",
+      "name": "Code Error Fail Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3640,
+        1080
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Load Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Job": {
+      "main": [
+        [
+          {
+            "node": "Clip Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clip Context": {
+      "main": [
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Model": {
+      "main": [
+        [
+          {
+            "node": "Model Available?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Model Available?": {
+      "main": [
+        [
+          {
+            "node": "Build LLM Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Model - Fail Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build LLM Request": {
+      "main": [
+        [
+          {
+            "node": "Is Gemini?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Error Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Gemini?": {
+      "main": [
+        [
+          {
+            "node": "Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is OpenAI-compatible?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is OpenAI-compatible?": {
+      "main": [
+        [
+          {
+            "node": "OpenAI-compatible (Groq etc.)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ollama (local)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini": {
+      "main": [
+        [
+          {
+            "node": "Parse LLM JSON",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Model Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI-compatible (Groq etc.)": {
+      "main": [
+        [
+          {
+            "node": "Parse LLM JSON",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Model Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama (local)": {
+      "main": [
+        [
+          {
+            "node": "Parse LLM JSON",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Model Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse LLM JSON": {
+      "main": [
+        [
+          {
+            "node": "Record Model Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Error Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Model Failure": {
+      "main": [
+        [
+          {
+            "node": "Model Failure Classify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Model Failure Classify": {
+      "main": [
+        [
+          {
+            "node": "Model Failure Fail Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Model Success": {
+      "main": [
+        [
+          {
+            "node": "Validate And QA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Pick Model",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Error Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate And QA": {
+      "main": [
+        [
+          {
+            "node": "Store Version + Enqueue Approval",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Error Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Error Classify Error": {
+      "main": [
+        [
+          {
+            "node": "Code Error Fail Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "note": "Credentials are NOT embedded. After import, open each node showing a credential warning and select your own credential (see SETUP.md)."
+  }
+}

@@ -1,0 +1,1 @@
+`python3 source/tools/build_all.py` regenerates the workflow JSON from source; `python3 source/tools/consolidate_sql.py --check` guards against duplicate SQL function definitions; `python3 scripts/package.py <dir>` rebuilds this package layout.

@@ -1,0 +1,295 @@
+{
+  "id": "cawf080000000000",
+  "name": "CA 08 Approval",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ca-w-approval-request",
+        "responseMode": "onReceived",
+        "options": {},
+        "authentication": "headerAuth"
+      },
+      "id": "3aa1af89-0e45-5137-a230-93dbbda95277",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "b1fb40c8-c588-5c35-8717-8b22704b598f"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT j.job_id, j.job_type, j.entity_id, j.correlation_id, j.payload, j.attempt, ch.id AS channel_id, ch.name AS channel_name, ch.platforms, ch.clip_min_seconds, ch.clip_max_seconds, ch.rules, ch.timezone, ch.quality_threshold, n.name AS niche_name, n.keywords FROM jobs j LEFT JOIN channels ch ON ch.id = NULLIF(j.payload->>'channel_id','')::uuid LEFT JOIN niches n ON n.id = ch.niche_id WHERE j.job_id = $1::uuid AND j.status = 'running'",
+        "options": {
+          "queryReplacement": "={{ [$('Webhook').first().json.body.job_id] }}"
+        }
+      },
+      "id": "9cfa7f65-2b47-5cbf-86d4-ff7450685787",
+      "name": "Load Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_approval_request($1::uuid) AS result",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id] }}"
+        }
+      },
+      "id": "2575bb7e-8d02-5658-a6e7-600e35d8929b",
+      "name": "Approval Request (autonomy gate)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "Manual mode: approval row stays awaiting_approval (+IMPORTANT email). Automatic mode: ca_autonomy_gate auto-approves ONLY if rights verified, policy not review_required/blocked, quality >= threshold, visual QA satisfied, no auth failure open. Human API below: approve | reject | edit | regenerate.",
+        "height": 140,
+        "width": 640
+      },
+      "id": "4e17aa77-acaa-50cb-af9c-560cc1efa590",
+      "name": "Read me",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ca-api-approval",
+        "responseMode": "responseNode",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "1956ee7e-f8a6-5077-b821-ea2c7f285a74",
+      "name": "API Approval Action",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        720
+      ],
+      "webhookId": "aa819793-663f-5a54-a9f2-1f3131051fc5"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || {};\nif (!/^[0-9a-f-]{36}$/i.test(b.approval_id || '')) throw new Error('VALIDATION: approval_id must be a UUID');\nif (!['approve', 'reject', 'edit', 'regenerate'].includes(b.action)) throw new Error('VALIDATION: action must be approve|reject|edit|regenerate');\nconst out = { action: b.action, approval_id: b.approval_id, by: String(b.by || 'owner').slice(0, 60), comments: b.comments ? String(b.comments).slice(0, 1000) : null, nonce: b.nonce || null };\nif (b.version !== undefined) out.version = Number(b.version);\nif (b.action === 'edit') {\n  const allow = ['youtube', 'instagram', 'facebook']; const pp = {};\n  for (const [k, m] of Object.entries(b.per_platform || {})) { if (!allow.includes(k)) continue;\n    pp[k] = { title: String(m.title || '').slice(0, 150), description: String(m.description || '').slice(0, 2000), hashtags: (m.hashtags || []).slice(0, 10).map(String) }; }\n  if (!Object.keys(pp).length) throw new Error('VALIDATION: edit needs per_platform metadata');\n  out.per_platform = pp;\n}\nreturn [{ json: out }];"
+      },
+      "id": "0480b69b-e39e-57aa-a420-1d657b64663e",
+      "name": "Validate API Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        720
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_approval_action($1::jsonb) AS result",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json)] }}"
+        }
+      },
+      "id": "ee1bc002-6485-558c-bb3d-0ca53ce359db",
+      "name": "Apply Action (versioned)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        720
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Maps a database/validation outcome to an HTTP status + structured JSON. No stack traces / internals are ever returned.\nconst clean = m => String(m || '').replace(/^\"+|\"+$/g, '').replace(/^(?:Error: )?(?:VALIDATION: )?/, '').replace(/ \\[line \\d+\\]$/, '').slice(0, 300);\nconst e = $input.first().json; return [{ json: { status: 400, body: { ok: false, error: 'VALIDATION', message: clean(e.error?.message ?? e.error ?? e.message) } } }];"
+      },
+      "id": "1168022d-5880-58c7-873f-74470d1dcd30",
+      "name": "API Validation Error (Approval Action)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        1440
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Maps a database/validation outcome to an HTTP status + structured JSON. No stack traces / internals are ever returned.\nconst clean = m => String(m || '').replace(/^\"+|\"+$/g, '').replace(/^(?:Error: )?(?:VALIDATION: )?/, '').replace(/ \\[line \\d+\\]$/, '').slice(0, 300);\nconst j = $input.first().json; const r = (j.result !== undefined && j.result !== null) ? j.result : j;\nif (r && r.ok === false) {\n  const code = String(r.error || 'CONFLICT'); const map = { not_found: 404, NOT_FOUND: 404, stale_version: 409, CONFLICT: 409, blocked_assessment_cannot_be_approved: 409, not_awaiting: 409, no_schedule: 404, not_editable: 409, conflict_min_gap: 409, in_the_past: 422, already_published: 409, no_active_assessment: 404 };\n  const status = map[code] || 400; const kind = status === 404 ? 'NOT_FOUND' : status === 409 ? 'CONFLICT' : status === 422 ? 'UNPROCESSABLE' : 'VALIDATION';\n  return [{ json: { status, body: { ok: false, error: kind, code, message: clean(r.message || code.replace(/_/g, ' ')), details: r } } }];\n}\nreturn [{ json: { status: 200, body: { ok: true, ...(typeof r === 'object' ? r : { result: r }) } } }];"
+      },
+      "id": "073b0b76-01a9-5454-9bd0-6dcad2788329",
+      "name": "API Format Result (Approval Action)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        1620
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Maps a database/validation outcome to an HTTP status + structured JSON. No stack traces / internals are ever returned.\nconst clean = m => String(m || '').replace(/^\"+|\"+$/g, '').replace(/^(?:Error: )?(?:VALIDATION: )?/, '').replace(/ \\[line \\d+\\]$/, '').slice(0, 300);\nconst e = $input.first().json; const raw = String(e.error?.message ?? e.error ?? e.message ?? '');\nif (/VALIDATION:/.test(raw)) return [{ json: { status: 400, body: { ok: false, error: 'VALIDATION', message: clean(raw) } } }];\nif (/invalid input syntax|violates (check|foreign|unique|not-null)|duplicate key/i.test(raw)) return [{ json: { status: 422, body: { ok: false, error: 'UNPROCESSABLE', message: 'request conflicts with stored data or has an invalid value' } } }];\nreturn [{ json: { status: 500, body: { ok: false, error: 'INTERNAL', message: 'internal error; see error log' } } }];"
+      },
+      "id": "f84021cc-fa19-562d-ba40-b73463deb5db",
+      "name": "API DB Error (Approval Action)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "responseCode": "={{ $json.status }}"
+        }
+      },
+      "id": "0723fbe6-58ee-5caa-94df-638dbbadfe9f",
+      "name": "API Respond (Approval Action)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1820,
+        1620
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Load Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Job": {
+      "main": [
+        [
+          {
+            "node": "Approval Request (autonomy gate)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Approval Action": {
+      "main": [
+        [
+          {
+            "node": "Validate API Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate API Input": {
+      "main": [
+        [
+          {
+            "node": "Apply Action (versioned)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "API Validation Error (Approval Action)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Action (versioned)": {
+      "main": [
+        [
+          {
+            "node": "API Format Result (Approval Action)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "API DB Error (Approval Action)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Validation Error (Approval Action)": {
+      "main": [
+        [
+          {
+            "node": "API Respond (Approval Action)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Format Result (Approval Action)": {
+      "main": [
+        [
+          {
+            "node": "API Respond (Approval Action)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API DB Error (Approval Action)": {
+      "main": [
+        [
+          {
+            "node": "API Respond (Approval Action)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "note": "Credentials are NOT embedded. After import, open each node showing a credential warning and select your own credential (see SETUP.md)."
+  }
+}

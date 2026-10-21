@@ -1,0 +1,107 @@
+# Content Automation Platform - Root .gitignore
+# Prevents accidental upload or tracking of secrets, credentials, backups, media, and local cache.
+
+# ----------------------------------------------------
+# 1. Environment Variables & Secret Configuration
+# ----------------------------------------------------
+config/.env
+config/.env.local
+config/.env.development
+config/.env.production
+config/.env.test
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+*.key
+*.pem
+*.pfx
+*.p12
+*_token.json
+token.json
+credentials.json
+client_secrets*.json
+
+# ----------------------------------------------------
+# 2. Database Dumps, Backups & Local Data
+# ----------------------------------------------------
+*.dump
+*.tar
+*.bak
+*.sqlite
+*.sqlite3
+*.db
+backups/
+
+# ----------------------------------------------------
+# 3. Dependencies & Build Artifacts
+# ----------------------------------------------------
+node_modules/
+*/node_modules/
+frontend/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ----------------------------------------------------
+# 4. Logs, Scratch, and Temporary Files
+# ----------------------------------------------------
+logs/
+*.log
+scratch/
+.tempmediaStorage/
+tmp/
+temp/
+
+# ----------------------------------------------------
+# 5. Media Artifacts & Working Caches
+# ----------------------------------------------------
+qa_work/
+*.mp4
+*.mp3
+*.wav
+*.m4a
+*.mov
+*.avi
+
+# ----------------------------------------------------
+# 6. IDE, AI Workspace & Operating System Artifacts
+# ----------------------------------------------------
+.agent/
+.agents/
+.claude/
+.cursor/
+.gemini/
+.uix/
+.vscode/
+.idea/
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# ----------------------------------------------------
+# 7. Local Backups & Third-Party Research Repositories
+# ----------------------------------------------------
+.backup_pre_mission35/
+research-repositories/
+.n8n/
+coverage/
+__pycache__/
+*.py[cod]
+
+# ----------------------------------------------------
+# 8. Historical Internal Mission Reports & Checkpoints
+# (Kept intact locally on disk; excluded from public/clean repo)
+# ----------------------------------------------------
+MISSION_*.md
+MISSION_*.json
+AUDIT_REPORT.md
+PHASE_1_REPORT.md
+FINAL_MASTER_COMPLETION_REPORT.md
+FRONTEND_IMPLEMENTATION_CHECKLIST.md
+CREDENTIALS_AND_INTEGRATIONS_INVENTORY.md
+
+

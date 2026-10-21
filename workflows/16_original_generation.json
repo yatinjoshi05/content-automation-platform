@@ -1,0 +1,264 @@
+{
+  "id": "cawf160000000000",
+  "name": "CA 16 Original Generation",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "Heavy job. Generates 100% original topic-to-video short: Windows SAPI narration, procedural 9:16 vertical video with animated progress bar, burned-in subtitles, host-side technical QA, and placement into human approval queue. Idempotent and bounded concurrency.",
+        "height": 140,
+        "width": 640
+      },
+      "id": "168eb60b-5b53-5fb4-89de-b077d51fae77",
+      "name": "Read me",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ca-w-original-gen",
+        "responseMode": "onReceived",
+        "options": {},
+        "authentication": "headerAuth"
+      },
+      "id": "1603dde1-9b2f-5446-9214-7eefa395779e",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "16bf97b7-d79f-57ea-9730-f4599a5264b4"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT j.job_id, j.job_type, j.entity_id, j.correlation_id, j.payload, j.attempt, ch.id AS channel_id, ch.name AS channel_name, (ca_setting('original_generator_url','\"http://localhost:9200\"'))#>>'{}' AS generator_url FROM jobs j LEFT JOIN channels ch ON ch.id = NULLIF(j.payload->>'channel_id','')::uuid WHERE j.job_id = $1::uuid AND j.status = 'running'",
+        "options": {
+          "queryReplacement": "={{ [$('Webhook').first().json.body.job_id] }}"
+        }
+      },
+      "id": "1698c906-d091-5ea7-86b1-af36bd3e4eb9",
+      "name": "Load Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const job = $input.first().json;\nif (!job.job_id) throw new Error('VALIDATION: missing job_id');\nif (!job.channel_id) throw new Error('VALIDATION: channel_id does not exist');\nconst p = job.payload || {};\nif (!p.topic || typeof p.topic !== 'string' || p.topic.trim().length < 5) throw new Error('VALIDATION: topic required');\nconst body = {\n  job_id: job.job_id,\n  channel_id: job.channel_id,\n  topic: p.topic.trim(),\n  idempotency_key: p.idempotency_key || ('orig_key_' + job.job_id),\n  audience: p.audience || 'general',\n  language: p.language || 'en-US',\n  duration_target: p.duration_target || 18,\n  style: p.style || 'productivity_tips',\n  caption_settings: p.caption_settings || { burned_in: true, font_size: 26 }\n};\nreturn [{ json: { generator_url: (job.generator_url || 'http://localhost:9200').replace(/\\/+$/, ''), body } }];"
+      },
+      "id": "16b1baef-f8a9-53e1-942d-d274099f5278",
+      "name": "Guard Original Gen Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.generator_url }}/generate",
+        "options": {
+          "timeout": 300000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      },
+      "id": "16ad772c-b2bd-5368-a45b-feb681331acd",
+      "name": "Original Generator Service",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_done($1::uuid, $2::jsonb) AS result",
+        "options": {
+          "queryReplacement": "={{ [$('Load Job').first().json.job_id, JSON.stringify($json.result || $json)] }}"
+        }
+      },
+      "id": "1622312e-8f80-51a3-a479-48da25420ca9",
+      "name": "Complete Original Gen Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize an error output into {job_id, category, message}. Secrets are redacted before anything is persisted.\nconst j = $input.first().json;\nconst jobId = $('Load Job').first().json.job_id;\nconst raw = JSON.stringify(j.error ?? j).slice(0, 700);\nconst m = raw.match(/\\b([45]\\d\\d)\\b/); const code = m ? +m[1] : 0;\nlet cat = 'UNKNOWN';\nif (/VALIDATION:/.test(raw)) cat = 'VALIDATION';\nelse if (/RIGHTS:/.test(raw)) cat = 'RIGHTS';\nelse if (code === 401 || code === 403 || /unauthori|invalid_grant|token (has )?expired|permission|credentials/i.test(raw)) cat = 'AUTH';\nelse if (code === 429 || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(raw)) cat = 'RATE_LIMIT';\nelse if (code >= 500 || /ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang|timed? ?out/i.test(raw)) cat = 'TRANSIENT';\nelse if (code >= 400) cat = 'VALIDATION';\nconst msg = raw.replace(/(api[_-]?key|key|token|secret|authorization|bearer)[\"'=: ]+[A-Za-z0-9._\\-]{8,}/gi, '$1=[redacted]');\nreturn [{ json: { job_id: jobId, category: cat, message: msg } }];"
+      },
+      "id": "168bb4d2-03e5-539b-9d7a-9971f6398d8d",
+      "name": "Gen Classify Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_fail($1::uuid, $2, $3)",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id, $json.category, $json.message] }}"
+        }
+      },
+      "id": "16a600d9-e8bc-562f-8202-50abdd536f16",
+      "name": "Gen Fail Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1300,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize an error output into {job_id, category, message}. Secrets are redacted before anything is persisted.\nconst j = $input.first().json;\nconst jobId = $('Load Job').first().json.job_id;\nconst raw = JSON.stringify(j.error ?? j).slice(0, 700);\nconst m = raw.match(/\\b([45]\\d\\d)\\b/); const code = m ? +m[1] : 0;\nlet cat = 'UNKNOWN';\nif (/VALIDATION:/.test(raw)) cat = 'VALIDATION';\nelse if (/RIGHTS:/.test(raw)) cat = 'RIGHTS';\nelse if (code === 401 || code === 403 || /unauthori|invalid_grant|token (has )?expired|permission|credentials/i.test(raw)) cat = 'AUTH';\nelse if (code === 429 || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(raw)) cat = 'RATE_LIMIT';\nelse if (code >= 500 || /ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang|timed? ?out/i.test(raw)) cat = 'TRANSIENT';\nelse if (code >= 400) cat = 'VALIDATION';\nconst msg = raw.replace(/(api[_-]?key|key|token|secret|authorization|bearer)[\"'=: ]+[A-Za-z0-9._\\-]{8,}/gi, '$1=[redacted]');\nreturn [{ json: { job_id: jobId, category: cat, message: msg } }];"
+      },
+      "id": "160a63d7-12cf-5acb-ac16-e04608fa6f98",
+      "name": "Code Error Classify Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        1080
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_fail($1::uuid, $2, $3)",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id, $json.category, $json.message] }}"
+        }
+      },
+      "id": "16128f48-4dd9-54ab-a39d-ad0bfdc087bb",
+      "name": "Code Error Fail Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1820,
+        1080
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Load Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Job": {
+      "main": [
+        [
+          {
+            "node": "Guard Original Gen Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard Original Gen Request": {
+      "main": [
+        [
+          {
+            "node": "Original Generator Service",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Error Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Original Generator Service": {
+      "main": [
+        [
+          {
+            "node": "Complete Original Gen Job",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gen Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gen Classify Error": {
+      "main": [
+        [
+          {
+            "node": "Gen Fail Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Error Classify Error": {
+      "main": [
+        [
+          {
+            "node": "Code Error Fail Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "note": "Credentials are NOT embedded. After import, open each node showing a credential warning and select your own credential (see SETUP.md)."
+  }
+}

@@ -1,0 +1,908 @@
+{
+  "id": "cawf020000000000",
+  "name": "CA 02 Trend Research",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ca-w-trend-research",
+        "responseMode": "onReceived",
+        "options": {},
+        "authentication": "headerAuth"
+      },
+      "id": "6f0da80c-a7e6-50a6-89f6-2b2d5cdffaec",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "34f24ffc-c100-5f2e-a0ba-1a9fdd30b97c"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT j.job_id, j.job_type, j.entity_id, j.correlation_id, j.payload, j.attempt, ch.id AS channel_id, ch.name AS channel_name, ch.platforms, ch.clip_min_seconds, ch.clip_max_seconds, ch.rules, ch.timezone, ch.quality_threshold, n.name AS niche_name, n.keywords FROM jobs j LEFT JOIN channels ch ON ch.id = NULLIF(j.payload->>'channel_id','')::uuid LEFT JOIN niches n ON n.id = ch.niche_id WHERE j.job_id = $1::uuid AND j.status = 'running'",
+        "options": {
+          "queryReplacement": "={{ [$('Webhook').first().json.body.job_id] }}"
+        }
+      },
+      "id": "1a5d3bd7-4889-5f59-ad06-0a425e53a578",
+      "name": "Load Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// one query per niche keyword (max 3); dates computed here, never hard-coded\nconst j = $input.first().json;\nconst kws = (j.keywords && j.keywords.length ? j.keywords : [j.niche_name]).filter(Boolean).slice(0, 3);\nif (!kws.length) throw new Error('VALIDATION: channel has no niche keywords to research');\nconst after = new Date(Date.now() - 7 * 864e5).toISOString();\nreturn kws.map(k => ({ json: { q: k, publishedAfter: after } }));"
+      },
+      "id": "637462e3-f067-56ed-973a-6b1503cafae9",
+      "name": "Build Searches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/search",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ part: 'snippet', type: 'video', order: 'viewCount', maxResults: 15, q: $json.q, publishedAfter: $json.publishedAfter, relevanceLanguage: 'en' }) }}"
+      },
+      "id": "e758ad3d-0fdf-5dac-9100-c20ef3095474",
+      "name": "YouTube Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all().flatMap(i => i.json.items || []);\nconst seen = new Set(); const ids = [];\nfor (const it of items) { const id = it.id?.videoId; if (id && !seen.has(id)) { seen.add(id); ids.push(id); } }\nif (!ids.length) throw new Error('VALIDATION: YouTube search returned no videos');\nreturn [{ json: { ids: ids.slice(0, 50).join(',') } }];"
+      },
+      "id": "aaafbd2f-8b29-543e-bf5d-865e751ba20c",
+      "name": "Collect Video IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/videos",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ part: 'snippet,statistics', id: $json.ids }) }}"
+      },
+      "id": "c3ea983f-95fa-55c4-a539-27b238cd7e1e",
+      "name": "YouTube Video Stats",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = Date.now(); const vids = ($input.first().json.items || []).map(v => {\n  const hrs = Math.max(1, (now - new Date(v.snippet.publishedAt).getTime()) / 36e5);\n  const views = Number(v.statistics?.viewCount || 0);\n  return { id: v.id, url: 'https://www.youtube.com/watch?v=' + v.id, title: v.snippet.title, channel: v.snippet.channelTitle, views, vph: views / hrs };\n}).sort((a, b) => b.vph - a.vph).slice(0, 25);\nconst maxv = Math.max(1, ...vids.map(v => v.vph));\nvids.forEach(v => v.momentum = +(v.vph / maxv).toFixed(3));\nconst job = $('Load Job').first().json;\nconst prompt = `Channel niche: ${job.niche_name}. Existing channel keywords: ${(job.keywords || []).join(', ')}.\\n` +\n `Recent high-velocity videos (real data, views-per-hour computed):\\n` + vids.map(v => `- [${v.id}] ${v.title} | ${v.channel} | vph=${Math.round(v.vph)} | momentum=${v.momentum}`).join('\\n') +\n `\\n\\nGroup these into up to 5 topics/formats. Use ONLY the video ids above as evidence. Set new_channel_opportunity=true ONLY if a topic is clearly OUTSIDE the channel niche but shows strong momentum. ` +\n `Return JSON: {\"trends\":[{\"niche\":str,\"topic\":str,\"llm_score\":0..1,\"confidence\":0..1,\"evidence_ids\":[ids],\"recommended_content_format\":str,\"recommended_posting_frequency\":str,\"recommended_posting_windows\":[str],\"recommended_channel\":str,\"new_channel_opportunity\":bool}]}. Scores are decision-support signals, never guarantees.`;\nreturn [{ json: { vids, prompt, system: 'You are a careful short-form content trend analyst. Output valid JSON only. Never claim virality is guaranteed.' } }];"
+      },
+      "id": "797c6e23-0eff-5914-9349-c038b27a59cd",
+      "name": "Compute Momentum (deterministic)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize an error output into {job_id, category, message}. Secrets are redacted before anything is persisted.\nconst j = $input.first().json;\nconst jobId = $('Load Job').first().json.job_id;\nconst raw = JSON.stringify(j.error ?? j).slice(0, 700);\nconst m = raw.match(/\\b([45]\\d\\d)\\b/); const code = m ? +m[1] : 0;\nlet cat = 'UNKNOWN';\nif (/VALIDATION:/.test(raw)) cat = 'VALIDATION';\nelse if (/RIGHTS:/.test(raw)) cat = 'RIGHTS';\nelse if (code === 401 || code === 403 || /unauthori|invalid_grant|token (has )?expired|permission|credentials/i.test(raw)) cat = 'AUTH';\nelse if (code === 429 || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(raw)) cat = 'RATE_LIMIT';\nelse if (code >= 500 || /ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang|timed? ?out/i.test(raw)) cat = 'TRANSIENT';\nelse if (code >= 400) cat = 'VALIDATION';\nconst msg = raw.replace(/(api[_-]?key|key|token|secret|authorization|bearer)[\"'=: ]+[A-Za-z0-9._\\-]{8,}/gi, '$1=[redacted]');\nreturn [{ json: { job_id: jobId, category: cat, message: msg } }];"
+      },
+      "id": "47e91278-5d4a-581a-8cd2-ea6b700af9fc",
+      "name": "YouTube Search Classify Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_fail($1::uuid, $2, $3)",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id, $json.category, $json.message] }}"
+        }
+      },
+      "id": "0107cb98-0385-518d-8455-856620e34ebd",
+      "name": "YouTube Search Fail Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1300,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize an error output into {job_id, category, message}. Secrets are redacted before anything is persisted.\nconst j = $input.first().json;\nconst jobId = $('Load Job').first().json.job_id;\nconst raw = JSON.stringify(j.error ?? j).slice(0, 700);\nconst m = raw.match(/\\b([45]\\d\\d)\\b/); const code = m ? +m[1] : 0;\nlet cat = 'UNKNOWN';\nif (/VALIDATION:/.test(raw)) cat = 'VALIDATION';\nelse if (/RIGHTS:/.test(raw)) cat = 'RIGHTS';\nelse if (code === 401 || code === 403 || /unauthori|invalid_grant|token (has )?expired|permission|credentials/i.test(raw)) cat = 'AUTH';\nelse if (code === 429 || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(raw)) cat = 'RATE_LIMIT';\nelse if (code >= 500 || /ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang|timed? ?out/i.test(raw)) cat = 'TRANSIENT';\nelse if (code >= 400) cat = 'VALIDATION';\nconst msg = raw.replace(/(api[_-]?key|key|token|secret|authorization|bearer)[\"'=: ]+[A-Za-z0-9._\\-]{8,}/gi, '$1=[redacted]');\nreturn [{ json: { job_id: jobId, category: cat, message: msg } }];"
+      },
+      "id": "9261fb93-cb54-50c2-acee-4e48d4cfa092",
+      "name": "YouTube Video Stats Classify Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_fail($1::uuid, $2, $3)",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id, $json.category, $json.message] }}"
+        }
+      },
+      "id": "2e3605f4-bbf2-5bcb-be7a-cb26f02728e1",
+      "name": "YouTube Video Stats Fail Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1820,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM ca_pick_model($1::text[], $2::boolean)",
+        "options": {
+          "queryReplacement": "={{ [[\"text\", \"json\"], !!$('Load Job').first().json.payload.use_fallback_provider] }}"
+        }
+      },
+      "id": "d436ab4a-c339-5e8a-a69c-15dd01527c9f",
+      "name": "Pick Model",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1820,
+        0
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "19d2bc22-9edf-5749-9948-d45174a10c61",
+              "leftValue": "={{ !!$json.provider }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "662997e8-ec00-5b97-b9f2-3c1f8771e4d3",
+      "name": "Model Available?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_fail($1::uuid, $2, $3)",
+        "options": {
+          "queryReplacement": "={{ [$('Load Job').first().json.job_id, 'RESOURCE', 'no enabled model provider is available (quota/circuit/config)'] }}"
+        }
+      },
+      "id": "84652e7e-065b-5a2c-8d18-a729c9948a63",
+      "name": "No Model - Fail Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2340,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const m = $json; const p = $('Compute Momentum (deterministic)').first().json;\nconst body = { system: p.system, prompt: p.prompt };\nreturn [{ json: { provider: m.provider, model: m.model, kind: m.kind, base_url: (m.base_url || '').replace(/\\/+$/, ''), body } }];"
+      },
+      "id": "b97c7e06-0acc-59b7-928d-fb9430974f92",
+      "name": "Build LLM Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2340,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "9b8e73c1-91e3-57a4-b506-d32cd8c5eac4",
+              "leftValue": "={{ $json.kind === 'gemini' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a535f5d8-9187-510c-b6c0-b5858361b8e5",
+      "name": "Is Gemini?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "65d78ddf-ecbf-5420-bc93-56ea7e7b5d9e",
+              "leftValue": "={{ $json.kind === 'openai_compat' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b39462d8-7f56-5b56-ac00-0292c604c2a4",
+      "name": "Is OpenAI-compatible?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2860,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.base_url }}/v1beta/models/{{ $json.model }}:generateContent",
+        "options": {
+          "timeout": 120000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: $json.body.system }] }, contents: [{ role: 'user', parts: [{ text: $json.body.prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.4 } }) }}"
+      },
+      "id": "cc773446-bc38-548c-b58e-e8a696123848",
+      "name": "Gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
+        -180
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.base_url }}/chat/completions",
+        "options": {
+          "timeout": 120000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model, temperature: 0.4, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: $json.body.system }, { role: 'user', content: $json.body.prompt }] }) }}"
+      },
+      "id": "18fc5873-af98-5e3c-9039-eb86a27ffa75",
+      "name": "OpenAI-compatible (Groq etc.)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3120,
+        180
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.base_url }}/api/chat",
+        "options": {
+          "timeout": 600000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model, stream: false, format: 'json', options: { temperature: 0.4, num_ctx: 8192 }, messages: [{ role: 'system', content: $json.body.system }, { role: 'user', content: $json.body.prompt }] }) }}"
+      },
+      "id": "5c1db5a5-bc58-5be7-aa0b-78869ead83fa",
+      "name": "Ollama (local)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3120,
+        360
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const meta = $('Build LLM Request').first().json; const r = $input.first().json;\nlet text = '';\nif (meta.kind === 'gemini') text = r.candidates?.[0]?.content?.parts?.map(p => p.text).join('') ?? '';\nelse if (meta.kind === 'openai_compat') text = r.choices?.[0]?.message?.content ?? '';\nelse text = r.message?.content ?? '';\ntext = String(text).replace(/^```json|```$/gim, '').trim();\nlet data; try { data = JSON.parse(text); } catch (e) { throw new Error('VALIDATION: model returned non-JSON output'); }\nreturn [{ json: { data, provider: meta.provider, model: meta.model } }];"
+      },
+      "id": "49ff0228-ce7d-5173-91cb-7fa6c710fbb5",
+      "name": "Parse LLM JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3380,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_model_result($1, true)",
+        "options": {
+          "queryReplacement": "={{ [$json.provider] }}"
+        }
+      },
+      "id": "f26ad770-50fe-5210-8b61-e35541f39f22",
+      "name": "Record Model Success",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_model_result($1, false, $2) AS state, $2::text AS err",
+        "options": {
+          "queryReplacement": "={{ [$('Build LLM Request').first().json.provider, JSON.stringify($json.error ?? $json).slice(0, 300)] }}"
+        }
+      },
+      "id": "bcc6e2db-c1c7-5411-a90d-c3772fe0bcf9",
+      "name": "Record Model Failure",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3380,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize an error output into {job_id, category, message}. Secrets are redacted before anything is persisted.\nconst j = $input.first().json;\nconst jobId = $('Load Job').first().json.job_id;\nconst raw = JSON.stringify(j.error ?? j).slice(0, 700);\nconst m = raw.match(/\\b([45]\\d\\d)\\b/); const code = m ? +m[1] : 0;\nlet cat = 'UNKNOWN';\nif (/VALIDATION:/.test(raw)) cat = 'VALIDATION';\nelse if (/RIGHTS:/.test(raw)) cat = 'RIGHTS';\nelse if (code === 401 || code === 403 || /unauthori|invalid_grant|token (has )?expired|permission|credentials/i.test(raw)) cat = 'AUTH';\nelse if (code === 429 || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(raw)) cat = 'RATE_LIMIT';\nelse if (code >= 500 || /ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang|timed? ?out/i.test(raw)) cat = 'TRANSIENT';\nelse if (code >= 400) cat = 'VALIDATION';\nconst msg = raw.replace(/(api[_-]?key|key|token|secret|authorization|bearer)[\"'=: ]+[A-Za-z0-9._\\-]{8,}/gi, '$1=[redacted]');\nreturn [{ json: { job_id: jobId, category: cat, message: msg } }];"
+      },
+      "id": "33a402e7-2654-54d7-9b6c-d835a6fa8380",
+      "name": "Model Failure Classify",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3640,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_fail($1::uuid, $2, $3)",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id, $json.category, $json.message] }}"
+        }
+      },
+      "id": "3768f265-1265-5641-b77c-19abe7504a6e",
+      "name": "Model Failure Fail Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3900,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Parse LLM JSON').first().json.data; const vids = $('Compute Momentum (deterministic)').first().json.vids;\nconst byId = Object.fromEntries(vids.map(v => [v.id, v]));\nconst out = [];\nfor (const t of (d.trends || []).slice(0, 5)) {\n  const ev = (t.evidence_ids || []).filter(i => byId[i]);            // AI may not invent evidence\n  if (!t.topic || !ev.length) continue;\n  const det = ev.reduce((a, i) => a + byId[i].momentum, 0) / ev.length;\n  const llm = Math.min(1, Math.max(0, Number(t.llm_score) || 0));\n  out.push({ niche: String(t.niche || '').slice(0, 80), topic: String(t.topic).slice(0, 160), source: 'youtube_search+' + $('Parse LLM JSON').first().json.provider,\n    trend_score: +((0.6 * det + 0.4 * llm).toFixed(3)), confidence: Math.min(1, Math.max(0, Number(t.confidence) || 0)),\n    evidence: ev.map(i => ({ url: byId[i].url, title: byId[i].title, views_per_hour: Math.round(byId[i].vph) })),\n    recommended_channel: t.recommended_channel || null, recommended_content_format: t.recommended_content_format || null,\n    recommended_posting_frequency: t.recommended_posting_frequency || null, recommended_posting_windows: t.recommended_posting_windows || [],\n    new_channel_opportunity: t.new_channel_opportunity === true });\n}\nreturn [{ json: { trends: out } }];"
+      },
+      "id": "0102569c-e1cd-535f-b09c-8b97114245ca",
+      "name": "Validate Trends",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2340,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_trend_store($1::uuid, $2::jsonb)",
+        "options": {
+          "queryReplacement": "={{ [$('Load Job').first().json.job_id, JSON.stringify($json.trends)] }}"
+        }
+      },
+      "id": "bc29df0f-0943-52d2-8f42-3c29fa9d7b65",
+      "name": "Store Trends + Enqueue Discovery",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize an error output into {job_id, category, message}. Secrets are redacted before anything is persisted.\nconst j = $input.first().json;\nconst jobId = $('Load Job').first().json.job_id;\nconst raw = JSON.stringify(j.error ?? j).slice(0, 700);\nconst m = raw.match(/\\b([45]\\d\\d)\\b/); const code = m ? +m[1] : 0;\nlet cat = 'UNKNOWN';\nif (/VALIDATION:/.test(raw)) cat = 'VALIDATION';\nelse if (/RIGHTS:/.test(raw)) cat = 'RIGHTS';\nelse if (code === 401 || code === 403 || /unauthori|invalid_grant|token (has )?expired|permission|credentials/i.test(raw)) cat = 'AUTH';\nelse if (code === 429 || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(raw)) cat = 'RATE_LIMIT';\nelse if (code >= 500 || /ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang|timed? ?out/i.test(raw)) cat = 'TRANSIENT';\nelse if (code >= 400) cat = 'VALIDATION';\nconst msg = raw.replace(/(api[_-]?key|key|token|secret|authorization|bearer)[\"'=: ]+[A-Za-z0-9._\\-]{8,}/gi, '$1=[redacted]');\nreturn [{ json: { job_id: jobId, category: cat, message: msg } }];"
+      },
+      "id": "dab62116-d196-5616-945a-b272df06e50b",
+      "name": "Code Error Classify Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4160,
+        1080
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_fail($1::uuid, $2, $3)",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id, $json.category, $json.message] }}"
+        }
+      },
+      "id": "b380a5d8-1027-56a4-9da2-682aa0f49fc1",
+      "name": "Code Error Fail Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        4420,
+        1080
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Load Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Job": {
+      "main": [
+        [
+          {
+            "node": "Build Searches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Searches": {
+      "main": [
+        [
+          {
+            "node": "YouTube Search",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Error Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube Search": {
+      "main": [
+        [
+          {
+            "node": "Collect Video IDs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "YouTube Search Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Video IDs": {
+      "main": [
+        [
+          {
+            "node": "YouTube Video Stats",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Error Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube Video Stats": {
+      "main": [
+        [
+          {
+            "node": "Compute Momentum (deterministic)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "YouTube Video Stats Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube Search Classify Error": {
+      "main": [
+        [
+          {
+            "node": "YouTube Search Fail Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube Video Stats Classify Error": {
+      "main": [
+        [
+          {
+            "node": "YouTube Video Stats Fail Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Model": {
+      "main": [
+        [
+          {
+            "node": "Model Available?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Model Available?": {
+      "main": [
+        [
+          {
+            "node": "Build LLM Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Model - Fail Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build LLM Request": {
+      "main": [
+        [
+          {
+            "node": "Is Gemini?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Error Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Gemini?": {
+      "main": [
+        [
+          {
+            "node": "Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is OpenAI-compatible?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is OpenAI-compatible?": {
+      "main": [
+        [
+          {
+            "node": "OpenAI-compatible (Groq etc.)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ollama (local)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini": {
+      "main": [
+        [
+          {
+            "node": "Parse LLM JSON",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Model Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI-compatible (Groq etc.)": {
+      "main": [
+        [
+          {
+            "node": "Parse LLM JSON",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Model Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama (local)": {
+      "main": [
+        [
+          {
+            "node": "Parse LLM JSON",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Model Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse LLM JSON": {
+      "main": [
+        [
+          {
+            "node": "Record Model Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Error Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Model Failure": {
+      "main": [
+        [
+          {
+            "node": "Model Failure Classify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Model Failure Classify": {
+      "main": [
+        [
+          {
+            "node": "Model Failure Fail Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Model Success": {
+      "main": [
+        [
+          {
+            "node": "Validate Trends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Momentum (deterministic)": {
+      "main": [
+        [
+          {
+            "node": "Pick Model",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Error Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Trends": {
+      "main": [
+        [
+          {
+            "node": "Store Trends + Enqueue Discovery",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Error Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Error Classify Error": {
+      "main": [
+        [
+          {
+            "node": "Code Error Fail Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "note": "Credentials are NOT embedded. After import, open each node showing a credential warning and select your own credential (see SETUP.md)."
+  }
+}

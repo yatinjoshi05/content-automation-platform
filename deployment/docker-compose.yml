@@ -1,0 +1,127 @@
+# Docker Compose specification for Content Automation Platform
+# Usage:
+#   1. Copy config/.env.example to config/.env and configure DB_PASSWORD and CA_INTERNAL_KEY
+#   2. Run: docker compose -f deployment/docker-compose.yml --env-file config/.env up -d
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ca_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-content_automation}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ca_pg_data:/var/lib/postgresql/data
+      - ../database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-content_automation}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: ca_n8n
+    restart: unless-stopped
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${DB_NAME:-content_automation}
+      - DB_POSTGRESDB_USER=${DB_USER:-postgres}
+      - DB_POSTGRESDB_PASSWORD=${DB_PASSWORD}
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      - NODE_FUNCTION_ALLOW_BUILTIN=crypto
+      - CA_INTERNAL_KEY=${CA_INTERNAL_KEY}
+      - GENERIC_TIMEZONE=Asia/Kolkata
+      - TZ=Asia/Kolkata
+    volumes:
+      - ca_n8n_data:/home/node/.n8n
+    ports:
+      - "127.0.0.1:5678:5678"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    container_name: ca_backend
+    restart: unless-stopped
+    command: ["node", "server/index.js"]
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-content_automation}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - FRONTEND_PORT=3001
+      - N8N_URL=http://n8n:5678
+      - CA_INTERNAL_KEY=${CA_INTERNAL_KEY}
+      - QA_WORKER_URL=http://qa_worker:9100
+      - QA_WORK_DIR=/app/qa_work
+    volumes:
+      - ca_qa_work:/app/qa_work
+    ports:
+      - "127.0.0.1:3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      n8n:
+        condition: service_started
+
+  qa_worker:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    container_name: ca_qa_worker
+    restart: unless-stopped
+    command: ["node", "workers/qa_worker.js"]
+    environment:
+      - CA_INTERNAL_KEY=${CA_INTERNAL_KEY}
+      - QA_WORK_DIR=/app/qa_work
+      - FFMPEG_CMD=ffmpeg
+      - FFPROBE_CMD=ffprobe
+    volumes:
+      - ca_qa_work:/app/qa_work
+    ports:
+      - "127.0.0.1:9100:9100"
+    depends_on:
+      - postgres
+
+  generator:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    container_name: ca_generator
+    restart: unless-stopped
+    command: ["node", "workers/original_generator.js"]
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-content_automation}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - CA_INTERNAL_KEY=${CA_INTERNAL_KEY}
+      - QA_WORK_DIR=/app/qa_work
+      - ORIGINAL_GENERATOR_PORT=9200
+      - FFMPEG_CMD=ffmpeg
+      - FFPROBE_CMD=ffprobe
+    volumes:
+      - ca_qa_work:/app/qa_work
+    ports:
+      - "127.0.0.1:9200:9200"
+    depends_on:
+      - postgres
+
+volumes:
+  ca_pg_data:
+  ca_n8n_data:
+  ca_qa_work:

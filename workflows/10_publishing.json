@@ -1,0 +1,1003 @@
+{
+  "id": "cawf100000000000",
+  "name": "CA 10 Publishing",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "Every minute: due schedules -> ca_publish_begin (idempotency key content:platform:channel, only 'scheduled' items, approved_version only) -> platform adapter. YouTube = official YouTube node (OAuth2). Instagram = Graph API Reels flow, GATED behind settings.adapter_verified_instagram. Facebook = fail-closed stub (unsupported). n8n triggers at the scheduled minute (platform-side scheduling is not used).",
+        "height": 140,
+        "width": 640
+      },
+      "id": "47b97816-db62-5c23-be19-e01f55292ab4",
+      "name": "Read me",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "048cdbd9-2d8d-5636-b6c4-f317c61003a9",
+      "name": "Every minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT schedule_id FROM ca_due_schedules(1)",
+        "options": {}
+      },
+      "id": "9997bb27-0dd3-584e-96e9-9fd1349a1bc0",
+      "name": "Due Schedules",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "cacred0000000001",
+          "name": "CA Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_publish_begin($1::uuid) AS r",
+        "options": {
+          "queryReplacement": "={{ [$json.schedule_id] }}"
+        }
+      },
+      "id": "72637c5d-b6ee-58a1-af96-e741f88a942a",
+      "name": "Begin Publication",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "cacred0000000001",
+          "name": "CA Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "e1cabdde-deca-55b8-954f-812b2f4336dc",
+              "leftValue": "={{ $json.r.ok === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e13e62b3-0d70-57e4-8edb-4c16720ddc08",
+      "name": "Begin OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "4572220f-77cb-5a3e-9338-1090836839fa",
+              "leftValue": "={{ $json.r.critical === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5c8beddf-1308-5894-94da-fc64e11e0ab3",
+      "name": "Duplicate Blocked?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        780,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT 1",
+        "options": {}
+      },
+      "id": "ce125423-0a42-5fa7-ac2e-eca8c303bae0",
+      "name": "Note Duplicate Blocked",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1040,
+        360
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "cacred0000000001",
+          "name": "CA Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT $1::uuid AS publication_id, $2::text AS platform, cv.per_platform -> $2::text AS meta, cl.video_url, (ca_setting('openshorts_base_url','\"http://localhost:8000\"'))#>>'{}' AS os_base, (ca_setting('public_media_base_url','\"\"'))#>>'{}' AS public_base, (ca_setting('meta_graph_version','\"v21.0\"'))#>>'{}' AS graph_v, (ca_setting('adapter_verified_' || $2::text,'false'))#>>'{}' AS verified, pa.external_account_id, COALESCE(ch.rules->>'youtube_category_id','22') AS yt_category, COALESCE(NULLIF(ch.rules->>'youtube_privacy',''),(ca_setting('youtube_default_privacy','\"private\"'))#>>'{}') AS yt_privacy, COALESCE(ch.rules->>'youtube_region','IN') AS yt_region FROM content c JOIN content_versions cv ON cv.content_id = c.content_id AND cv.version = c.approved_version JOIN clips cl ON cl.clip_id = cv.clip_id JOIN channels ch ON ch.id = c.channel_id LEFT JOIN platform_accounts pa ON pa.channel_id = c.channel_id AND pa.platform = $2::text AND pa.enabled WHERE c.content_id = $3::uuid",
+        "options": {
+          "queryReplacement": "={{ [$json.r.publication_id, $json.r.platform, $json.r.content_id] }}"
+        }
+      },
+      "id": "0c6ad584-a34d-5b20-b2c6-5bfb406bd20a",
+      "name": "Load Payload",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1040,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "cacred0000000001",
+          "name": "CA Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const parseUrl = s => { const m = /^(https?):\\/\\/([A-Za-z0-9.\\-]+)(?::(\\d+))?(\\/[^\\s]*)?$/.exec(String(s || '')); if (!m) return null; return { protocol: m[1] + ':', hostname: m[2].toLowerCase(), host: m[2].toLowerCase() + (m[3] ? ':' + m[3] : ''), href: m[0] }; };  // n8n Code sandbox has NO URL global (verified on n8n 2.41.4)\nconst j = $input.first().json; const m = j.meta;\nif (!m || !m.title) throw new Error('VALIDATION: approved version has no metadata for ' + j.platform);\nif (j.platform === 'youtube') { if (!['public', 'private', 'unlisted'].includes(j.yt_privacy)) throw new Error('VALIDATION: youtube privacy must be public|private|unlisted'); if (String(m.title).length > 100) throw new Error('VALIDATION: youtube title longer than 100 characters'); }\nif (j.verified !== 'true') throw new Error('UNSUPPORTED: adapter for ' + j.platform + ' is not enabled (settings.adapter_verified_' + j.platform + ' != true)');\nconst u = parseUrl(j.video_url); if (!u) throw new Error('VALIDATION: clip url invalid');\nconst b = parseUrl(j.os_base); if (!b) throw new Error('VALIDATION: openshorts_base_url invalid'); const allowed = [b.host, '127.0.0.1:3001', 'localhost:3001']; if (!allowed.includes(u.host)) throw new Error('VALIDATION: clip url host is not the configured clip engine host');   // no arbitrary URLs\nreturn [{ json: { ...j, platform: j.platform } }];"
+      },
+      "id": "5b648c59-c177-54c3-b837-e27d40f648bf",
+      "name": "Guard Media And Adapter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "a629ff11-5a24-5ab7-833a-8cf6dc7c8d5e",
+              "leftValue": "={{ $json.platform === 'youtube' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "602132cf-de16-5fb7-a685-b4fb1b9e73a8",
+      "name": "Platform = YouTube?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "0028aa71-d041-552b-81c2-a34897394501",
+              "leftValue": "={{ $json.platform === 'instagram' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4f9162ff-89e4-55bc-976b-5c393a7cdfff",
+      "name": "Platform = Instagram?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1820,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.video_url }}",
+        "options": {
+          "timeout": 600000,
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "834c9c12-306a-5e4b-8902-ec7fcaac1166",
+      "name": "Download Clip (local engine)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1820,
+        -180
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "resource": "video",
+        "operation": "upload",
+        "title": "={{ $('Guard Media And Adapter').first().json.meta.title }}",
+        "regionCode": "={{ $('Guard Media And Adapter').first().json.yt_region }}",
+        "categoryId": "={{ $('Guard Media And Adapter').first().json.yt_category }}",
+        "binaryProperty": "data",
+        "options": {
+          "description": "={{ $('Guard Media And Adapter').first().json.meta.description + '\\n\\n#Shorts' }}",
+          "privacyStatus": "={{ $('Guard Media And Adapter').first().json.yt_privacy }}",
+          "tags": "={{ ($('Guard Media And Adapter').first().json.meta.hashtags || []).map(h => h.replace('#','')).join(',') }}",
+          "selfDeclaredMadeForKids": false
+        }
+      },
+      "id": "4422f555-0ca1-563e-90d3-6ff76e0de529",
+      "name": "YouTube Upload",
+      "type": "n8n-nodes-base.youTube",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        -180
+      ],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "aW88tIxnGXytCOpn",
+          "name": "YouTube account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_publish_result($1::uuid, true, $2, NULL)",
+        "options": {
+          "queryReplacement": "={{ [$('Guard Media And Adapter').first().json.publication_id, $json.uploadId || $json.id] }}"
+        }
+      },
+      "id": "430726b8-3793-5a2a-9219-4a91c136c06a",
+      "name": "YouTube Result",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2340,
+        -180
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "cacred0000000001",
+          "name": "CA Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/{{ $json.graph_v }}/{{ $json.external_account_id }}/media",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ media_type: 'REELS', video_url: $json.video_url.replace($json.os_base, $json.public_base), caption: $json.meta.caption || $json.meta.title }) }}"
+      },
+      "id": "746134e4-a200-566c-8046-1a6e90099724",
+      "name": "IG Create Reels Container",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2080,
+        360
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "amount": 90,
+        "unit": "seconds"
+      },
+      "id": "fe776bd3-7cb4-5760-9bac-775d5f9e134a",
+      "name": "IG Wait For Processing",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2340,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/{{ $('Guard Media And Adapter').first().json.graph_v }}/{{ $('IG Create Reels Container').first().json.id }}",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ fields: 'status_code' }) }}"
+      },
+      "id": "b3066a0e-5328-5d5f-b7ee-ae1055fa6226",
+      "name": "IG Check Container",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2600,
+        360
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "aaa69ff4-30ba-59e4-9bcf-b2de96af0e79",
+              "leftValue": "={{ $json.status_code === 'FINISHED' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "65cdaa0d-a0e3-5c38-a5b7-db9f7a93a98a",
+      "name": "IG Finished?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2860,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/{{ $('Guard Media And Adapter').first().json.graph_v }}/{{ $('Guard Media And Adapter').first().json.external_account_id }}/media_publish",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ creation_id: $('IG Create Reels Container').first().json.id }) }}"
+      },
+      "id": "cae14e17-5741-5a15-96a8-c3a253b9dbc1",
+      "name": "IG Publish",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3120,
+        360
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_publish_result($1::uuid, true, $2, NULL)",
+        "options": {
+          "queryReplacement": "={{ [$('Guard Media And Adapter').first().json.publication_id, $json.id] }}"
+        }
+      },
+      "id": "2811b489-1241-57f4-bf60-fdd18a2121cb",
+      "name": "IG Result",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3380,
+        360
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "cacred0000000001",
+          "name": "CA Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_publish_result($1::uuid, false, NULL, $2, 'TRANSIENT')",
+        "options": {
+          "queryReplacement": "={{ [$('Guard Media And Adapter').first().json.publication_id, 'Instagram container not FINISHED: ' + $json.status_code] }}"
+        }
+      },
+      "id": "4179cbb4-de61-5fb6-b67e-9b8bad3132ab",
+      "name": "IG Not Ready - Retry Later",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3120,
+        540
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "cacred0000000001",
+          "name": "CA Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize an error output into {job_id, category, message}. Secrets are redacted before anything is persisted.\nconst j = $input.first().json;\nconst jobId = $('Begin Publication').first().json.r.publication_id;\nconst raw = JSON.stringify(j.error ?? j).slice(0, 700);\nconst m = raw.match(/\\b([45]\\d\\d)\\b/); const code = m ? +m[1] : 0;\nlet cat = 'UNKNOWN';\nif (/UNSUPPORTED:/.test(raw)) cat = 'UNSUPPORTED';\nelse if (/VALIDATION:/.test(raw)) cat = 'VALIDATION';\nelse if (/RIGHTS:/.test(raw)) cat = 'RIGHTS';\nelse if (code === 401 || code === 403 || /unauthori|invalid_grant|token.*expired|OAuthException|\\(#190\\)|permission|credentials/i.test(raw)) cat = 'AUTH';\nelse if (code === 429 || /quota|rate.?limit|request limit|\\(#17\\)|\\(#4\\)|\\(#32\\)|\\(#613\\)|RESOURCE_EXHAUSTED/i.test(raw)) cat = 'RATE_LIMIT';\nelse if (code >= 500 || /ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang|timed? ?out/i.test(raw)) cat = 'TRANSIENT';\nelse if (code >= 400) cat = 'VALIDATION';\nif (['YouTube Upload', 'IG Publish', 'FB Publish Reel'].includes($prevNode.name) && (cat === 'TRANSIENT' || cat === 'UNKNOWN')) cat = 'AMBIGUOUS';   // upload may have succeeded: never auto-retried\nconst msg = raw.replace(/(api[_-]?key|key|token|secret|authorization|bearer)[\"'=:\\s]+[A-Za-z0-9._\\-]{8,}/gi, '$1=[redacted]');\nreturn [{ json: { publication_id: jobId, category: cat, message: msg } }];"
+      },
+      "id": "b5f68c13-99b3-5927-9855-45c5657a457c",
+      "name": "Publish Classify Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3640,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_publish_result($1::uuid, false, NULL, $3, $2)",
+        "options": {
+          "queryReplacement": "={{ [$json.publication_id, $json.category, $json.message] }}"
+        }
+      },
+      "id": "69633b8e-ca6e-5d32-97a5-509cff435832",
+      "name": "Publish Record Failure",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3900,
+        900
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "cacred0000000001",
+          "name": "CA Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "fb29ff11-5a24-5ab7-833a-8cf6dc7c8d5e",
+              "leftValue": "={{ $json.platform === \"facebook\" }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5c9162ff-89e4-55bc-976b-5c393a7cd001",
+      "name": "Platform = Facebook?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1820,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/{{ $json.graph_v }}/{{ $json.external_account_id }}/video_reels",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ upload_phase: \"start\" }) }}"
+      },
+      "id": "746134e4-a200-566c-8046-1a6e900997fb",
+      "name": "FB Initialize Reel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2080,
+        720
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/{{ $('Guard Media And Adapter').first().json.graph_v }}/{{ $('Guard Media And Adapter').first().json.external_account_id }}/video_reels",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ upload_phase: 'finish', video_id: $json.video_id, video_state: 'PUBLISHED', description: $('Guard Media And Adapter').first().json.meta.caption || $('Guard Media And Adapter').first().json.meta.title }) }}"
+      },
+      "id": "cae14e17-5741-5a15-96a8-c3a253b9dcfb",
+      "name": "FB Publish Reel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2340,
+        720
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_publish_result($1::uuid, true, $2, NULL)",
+        "options": {
+          "queryReplacement": "={{ [$('Guard Media And Adapter').first().json.publication_id, $('FB Initialize Reel').first().json.video_id] }}"
+        }
+      },
+      "id": "2811b489-1241-57f4-bf60-fdd18a2121fb",
+      "name": "FB Result",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2600,
+        720
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "cacred0000000001",
+          "name": "CA Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "throw new Error('UNSUPPORTED: platform ' + $input.first().json.platform + ' is not supported');"
+      },
+      "id": "c1241275-226c-5e28-a14a-65c9fc050346",
+      "name": "Unsupported Platform",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2080,
+        900
+      ],
+      "onError": "continueErrorOutput"
+    }
+  ],
+  "connections": {
+    "Every minute": {
+      "main": [
+        [
+          {
+            "node": "Due Schedules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Due Schedules": {
+      "main": [
+        [
+          {
+            "node": "Begin Publication",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Begin Publication": {
+      "main": [
+        [
+          {
+            "node": "Begin OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Begin OK?": {
+      "main": [
+        [
+          {
+            "node": "Load Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Duplicate Blocked?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Duplicate Blocked?": {
+      "main": [
+        [
+          {
+            "node": "Note Duplicate Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Payload": {
+      "main": [
+        [
+          {
+            "node": "Guard Media And Adapter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard Media And Adapter": {
+      "main": [
+        [
+          {
+            "node": "Platform = YouTube?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Publish Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Platform = YouTube?": {
+      "main": [
+        [
+          {
+            "node": "Download Clip (local engine)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Platform = Instagram?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Clip (local engine)": {
+      "main": [
+        [
+          {
+            "node": "YouTube Upload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Publish Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube Upload": {
+      "main": [
+        [
+          {
+            "node": "YouTube Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Publish Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Platform = Instagram?": {
+      "main": [
+        [
+          {
+            "node": "IG Create Reels Container",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Platform = Facebook?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG Create Reels Container": {
+      "main": [
+        [
+          {
+            "node": "IG Wait For Processing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Publish Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG Wait For Processing": {
+      "main": [
+        [
+          {
+            "node": "IG Check Container",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG Check Container": {
+      "main": [
+        [
+          {
+            "node": "IG Finished?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Publish Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG Finished?": {
+      "main": [
+        [
+          {
+            "node": "IG Publish",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IG Not Ready - Retry Later",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG Publish": {
+      "main": [
+        [
+          {
+            "node": "IG Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Publish Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish Classify Error": {
+      "main": [
+        [
+          {
+            "node": "Publish Record Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Platform = Facebook?": {
+      "main": [
+        [
+          {
+            "node": "FB Initialize Reel",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unsupported Platform",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FB Initialize Reel": {
+      "main": [
+        [
+          {
+            "node": "FB Publish Reel",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Publish Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FB Publish Reel": {
+      "main": [
+        [
+          {
+            "node": "FB Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Publish Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unsupported Platform": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Publish Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "note": "Credentials are NOT embedded. After import, open each node showing a credential warning and select your own credential (see SETUP.md)."
+  }
+}

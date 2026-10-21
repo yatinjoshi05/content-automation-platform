@@ -1,0 +1,151 @@
+{
+  "id": "cawf120000000000",
+  "name": "CA 12 Supervisor And Resource Manager",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "Bounded supervisor (no recursive agents): every 2 min ca_supervisor_tick() recovers stuck jobs (retry ladder, max attempts -> dead_letter), moves cooled-down circuits to half_open, alerts on backlog/dead letters/low disk. Recovery levels 1-6 live in ca_job_fail. Resource snapshots arrive from tools/host_reporter.ps1 (n8n cannot read host CPU/RAM by itself).",
+        "height": 140,
+        "width": 640
+      },
+      "id": "f83b32b1-2839-55fb-8738-3e05237df93d",
+      "name": "Read me",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      },
+      "id": "3056dcc2-4390-537d-9968-2acaeb954ff1",
+      "name": "Every 2 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_supervisor_tick() AS actions",
+        "options": {}
+      },
+      "id": "d48f127c-01ad-55bc-bb13-32f0cf96cabb",
+      "name": "Supervisor Tick",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ca-w-resource",
+        "responseMode": "lastNode",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "52b28c5e-e542-5ed0-894d-99f3e7a8d2b3",
+      "name": "Resource Snapshot Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        540
+      ],
+      "webhookId": "e46b62f0-ef6a-5790-bcce-e9f79746cba1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || {}; const num = (x, lo, hi) => { const n = Number(x); if (!isFinite(n) || n < lo || n > hi) throw new Error('VALIDATION: out of range'); return n; };\nreturn [{ json: { cpu: num(b.cpu_percent, 0, 100), ram: num(b.ram_percent, 0, 100), disk: num(b.disk_free_gb, 0, 100000) } }];"
+      },
+      "id": "059a276a-f48d-5c40-b905-6afa8a8c6846",
+      "name": "Validate Snapshot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO resource_snapshots(cpu_percent, ram_percent, disk_free_gb) VALUES ($1::numeric, $2::numeric, $3::numeric) RETURNING id",
+        "options": {
+          "queryReplacement": "={{ [$json.cpu, $json.ram, $json.disk] }}"
+        }
+      },
+      "id": "4003a339-e870-54d4-b100-92649ecd6fc6",
+      "name": "Insert Snapshot",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        540
+      ]
+    }
+  ],
+  "connections": {
+    "Every 2 minutes": {
+      "main": [
+        [
+          {
+            "node": "Supervisor Tick",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resource Snapshot Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Snapshot": {
+      "main": [
+        [
+          {
+            "node": "Insert Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "note": "Credentials are NOT embedded. After import, open each node showing a credential warning and select your own credential (see SETUP.md)."
+  }
+}

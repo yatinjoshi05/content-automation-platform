@@ -1,0 +1,541 @@
+{
+  "id": "cawf110000000000",
+  "name": "CA 11 Analytics And Earnings",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "YouTube: public statistics via Data API videos.list (views, likes, comments) - only metrics the API returns are stored; others stay NULL (never invented). Watch time/retention/revenue need the YouTube Analytics API (OAuth, extra scopes) -> adapter NOT implemented. Instagram/Facebook insights: NOT implemented. Earnings: record via API below (estimated vs confirmed kept separate).",
+        "height": 140,
+        "width": 640
+      },
+      "id": "d86481d7-9577-5e6c-bd19-f1ec0ddf7e7e",
+      "name": "Read me",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "c0b06aaf-7bff-5ffe-a887-0504f495b64e",
+      "name": "Every 6 hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT p.id AS publication_id, p.channel_id, p.platform_post_id FROM publications p WHERE p.status = 'published' AND p.platform = 'youtube' AND p.platform_post_id IS NOT NULL AND p.published_at > now() - interval '30 days' AND NOT EXISTS (SELECT 1 FROM analytics_snapshots a WHERE a.publication_id = p.id AND a.captured_at > now() - interval '5 hours') LIMIT 40",
+        "options": {}
+      },
+      "id": "5d5ac715-a453-53ad-81c2-00f9d1ebddaa",
+      "name": "Recent Publications",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => i.json).filter(r => r.platform_post_id);\nif (!rows.length) return [{ json: { none: true } }];\nreturn [{ json: { ids: rows.map(r => r.platform_post_id).join(','), map: Object.fromEntries(rows.map(r => [r.platform_post_id, r])) } }];"
+      },
+      "id": "a385189d-67ee-5758-bd31-d09bcd42a210",
+      "name": "Build ID List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "12fa60a5-e7ea-5ba0-9e79-ba7f62685742",
+              "leftValue": "={{ !$json.none }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7997c202-6c2b-5c5c-8c56-c75e2b390604",
+      "name": "Any To Collect?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/videos",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ part: 'statistics', id: $json.ids }) }}"
+      },
+      "id": "c39e4a19-0905-5d74-bbaf-90e7767fdd45",
+      "name": "YouTube Statistics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const map = $('Build ID List').first().json.map; const out = [];\nfor (const v of ($input.first().json.items || [])) { const r = map[v.id]; if (!r) continue; const s = v.statistics || {}; const avail = []; const n = k => (s[k] !== undefined ? (avail.push(k.replace('Count', 's')), Number(s[k])) : null);\n  const views = n('viewCount'), likes = n('likeCount'), comments = n('commentCount');\n  out.push({ json: { publication_id: r.publication_id, channel_id: r.channel_id, raw: v, views, likes, comments, avail: '{' + avail.join(',') + '}' } }); }\nreturn out.length ? out : [{ json: { none: true } }];"
+      },
+      "id": "fd895ec1-cd1b-5e71-8b40-a106758addaa",
+      "name": "Map Snapshots",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO analytics_snapshots(publication_id, channel_id, platform, raw, views, likes, comments, metrics_available) VALUES ($1::uuid, $2::uuid, 'youtube', $3::jsonb, $4::bigint, $5::bigint, $6::bigint, $7::text[]) RETURNING id",
+        "options": {
+          "queryReplacement": "={{ [$json.publication_id, $json.channel_id, JSON.stringify($json.raw), $json.views, $json.likes, $json.comments, $json.avail] }}"
+        }
+      },
+      "id": "37f63207-e5af-5e6f-87fc-7479e16d795a",
+      "name": "Insert Snapshot",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_emit('analytics.updated', NULL, NULL, jsonb_build_object('snapshots', $1::int), 'analytics')",
+        "options": {
+          "queryReplacement": "={{ [$input.all().length] }}"
+        }
+      },
+      "id": "f7b677e9-7990-5de6-b41b-7c1720693177",
+      "name": "Emit analytics.updated",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1820,
+        0
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_circuit_record('youtube_api', true)",
+        "options": {}
+      },
+      "id": "6631c4f0-e43a-58b3-bc16-c388e0af578f",
+      "name": "Record API Success",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1300,
+        540
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_circuit_record('youtube_api', false, $1)",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json.error ?? $json).slice(0, 300)] }}"
+        }
+      },
+      "id": "73e3a04c-b5ff-562f-97c8-08e02018d365",
+      "name": "Analytics API Failure Record",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1300,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "bc4891ae-e1a5-5ce9-9859-72c2251bd624",
+      "name": "Weekly window suggestions",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_apply_windows() AS applied",
+        "options": {}
+      },
+      "id": "ff30a2ee-41a8-58fa-ad70-7eab7c507d9e",
+      "name": "Suggest/Apply Windows",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ca-api-earning",
+        "responseMode": "responseNode",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "9780c432-71b9-5924-be0c-00f9c9d4985c",
+      "name": "API Record Earning",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        1080
+      ],
+      "webhookId": "5576dd9f-a921-55ae-8650-1aac7203c8c7"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || {};\nif (!['youtube', 'instagram', 'facebook'].includes(b.platform)) throw new Error('VALIDATION: platform');\nif (!/^[A-Z]{3}$/.test(b.currency || '')) throw new Error('VALIDATION: currency must be ISO-4217, e.g. USD');\nconst amt = Number(b.gross_amount); if (!isFinite(amt) || amt < 0) throw new Error('VALIDATION: gross_amount');\nif (!['estimated', 'confirmed'].includes(b.confirmation)) throw new Error('VALIDATION: confirmation must be estimated|confirmed');\nreturn [{ json: { platform: b.platform, channel_id: b.channel_id || null, content_id: b.content_id || null, period_start: b.period_start, period_end: b.period_end, gross_amount: amt,\n  currency: b.currency, usd_amount: b.usd_amount ?? null, program: b.program || null, rpm: b.rpm ?? null, confirmation: b.confirmation, payout_status: b.payout_status || null } }];"
+      },
+      "id": "f7ec5a3a-01c4-5553-939f-778f12d62009",
+      "name": "Validate API Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        1080
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO earnings(platform, channel_id, content_id, period_start, period_end, gross_amount, currency, usd_amount, program, rpm, confirmation, payout_status) VALUES ($1, $2::uuid, $3::uuid, $4::date, $5::date, $6::numeric, $7, $8::numeric, $9, $10::numeric, $11, $12) RETURNING id",
+        "options": {
+          "queryReplacement": "={{ [$json.platform, $json.channel_id, $json.content_id, $json.period_start, $json.period_end, $json.gross_amount, $json.currency, $json.usd_amount, $json.program, $json.rpm, $json.confirmation, $json.payout_status] }}"
+        }
+      },
+      "id": "771f3bba-9e19-52b1-8267-fb0d86ecfd77",
+      "name": "Insert Earning",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        1080
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Maps a database/validation outcome to an HTTP status + structured JSON. No stack traces / internals are ever returned.\nconst clean = m => String(m || '').replace(/^\"+|\"+$/g, '').replace(/^(?:Error: )?(?:VALIDATION: )?/, '').replace(/ \\[line \\d+\\]$/, '').slice(0, 300);\nconst e = $input.first().json; return [{ json: { status: 400, body: { ok: false, error: 'VALIDATION', message: clean(e.error?.message ?? e.error ?? e.message) } } }];"
+      },
+      "id": "3e935f28-a05c-5abb-9bef-163525b8745f",
+      "name": "API Validation Error (Record Earning)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        1440
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Maps a database/validation outcome to an HTTP status + structured JSON. No stack traces / internals are ever returned.\nconst clean = m => String(m || '').replace(/^\"+|\"+$/g, '').replace(/^(?:Error: )?(?:VALIDATION: )?/, '').replace(/ \\[line \\d+\\]$/, '').slice(0, 300);\nconst j = $input.first().json; const r = (j.result !== undefined && j.result !== null) ? j.result : j;\nif (r && r.ok === false) {\n  const code = String(r.error || 'CONFLICT'); const map = { not_found: 404, NOT_FOUND: 404, stale_version: 409, CONFLICT: 409, blocked_assessment_cannot_be_approved: 409, not_awaiting: 409, no_schedule: 404, not_editable: 409, conflict_min_gap: 409, in_the_past: 422, already_published: 409, no_active_assessment: 404 };\n  const status = map[code] || 400; const kind = status === 404 ? 'NOT_FOUND' : status === 409 ? 'CONFLICT' : status === 422 ? 'UNPROCESSABLE' : 'VALIDATION';\n  return [{ json: { status, body: { ok: false, error: kind, code, message: clean(r.message || code.replace(/_/g, ' ')), details: r } } }];\n}\nreturn [{ json: { status: 200, body: { ok: true, ...(typeof r === 'object' ? r : { result: r }) } } }];"
+      },
+      "id": "e3a23b0d-c4ee-59d9-939d-04b3c99ba03e",
+      "name": "API Format Result (Record Earning)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        1620
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Maps a database/validation outcome to an HTTP status + structured JSON. No stack traces / internals are ever returned.\nconst clean = m => String(m || '').replace(/^\"+|\"+$/g, '').replace(/^(?:Error: )?(?:VALIDATION: )?/, '').replace(/ \\[line \\d+\\]$/, '').slice(0, 300);\nconst e = $input.first().json; const raw = String(e.error?.message ?? e.error ?? e.message ?? '');\nif (/VALIDATION:/.test(raw)) return [{ json: { status: 400, body: { ok: false, error: 'VALIDATION', message: clean(raw) } } }];\nif (/invalid input syntax|violates (check|foreign|unique|not-null)|duplicate key/i.test(raw)) return [{ json: { status: 422, body: { ok: false, error: 'UNPROCESSABLE', message: 'request conflicts with stored data or has an invalid value' } } }];\nreturn [{ json: { status: 500, body: { ok: false, error: 'INTERNAL', message: 'internal error; see error log' } } }];"
+      },
+      "id": "925ea6d5-d218-5184-bc33-7ad64aa613b4",
+      "name": "API DB Error (Record Earning)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "responseCode": "={{ $json.status }}"
+        }
+      },
+      "id": "99e8635b-b5bc-5ff3-b167-eff90dd2d1bd",
+      "name": "API Respond (Record Earning)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1820,
+        1620
+      ]
+    }
+  ],
+  "connections": {
+    "Every 6 hours": {
+      "main": [
+        [
+          {
+            "node": "Recent Publications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recent Publications": {
+      "main": [
+        [
+          {
+            "node": "Build ID List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build ID List": {
+      "main": [
+        [
+          {
+            "node": "Any To Collect?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any To Collect?": {
+      "main": [
+        [
+          {
+            "node": "YouTube Statistics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube Statistics": {
+      "main": [
+        [
+          {
+            "node": "Map Snapshots",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Record API Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Analytics API Failure Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Snapshots": {
+      "main": [
+        [
+          {
+            "node": "Insert Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Snapshot": {
+      "main": [
+        [
+          {
+            "node": "Emit analytics.updated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly window suggestions": {
+      "main": [
+        [
+          {
+            "node": "Suggest/Apply Windows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Record Earning": {
+      "main": [
+        [
+          {
+            "node": "Validate API Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate API Input": {
+      "main": [
+        [
+          {
+            "node": "Insert Earning",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "API Validation Error (Record Earning)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Earning": {
+      "main": [
+        [
+          {
+            "node": "API Format Result (Record Earning)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "API DB Error (Record Earning)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Validation Error (Record Earning)": {
+      "main": [
+        [
+          {
+            "node": "API Respond (Record Earning)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Format Result (Record Earning)": {
+      "main": [
+        [
+          {
+            "node": "API Respond (Record Earning)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API DB Error (Record Earning)": {
+      "main": [
+        [
+          {
+            "node": "API Respond (Record Earning)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "note": "Credentials are NOT embedded. After import, open each node showing a credential warning and select your own credential (see SETUP.md)."
+  }
+}

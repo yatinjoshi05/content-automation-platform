@@ -1,0 +1,292 @@
+{
+  "id": "cawf150000000000",
+  "name": "CA 15 Visual QA And Thumbnail",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "Heavy job. Calls the host-side ffmpeg QA worker (tools/qa_worker.js): playable, duration, 9:16, resolution, audio present/level, black/frozen frames, thumbnail generation+validation. NOT assessed (reported honestly): speaker framing, subtitles. Result gates automatic mode AND the final pre-publish gate. If the worker is down the job retries/dead-letters - content never skips QA.",
+        "height": 140,
+        "width": 640
+      },
+      "id": "448eb60b-5b53-5fb4-89de-b077d51fae77",
+      "name": "Read me",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ca-w-visual-qa",
+        "responseMode": "onReceived",
+        "options": {},
+        "authentication": "headerAuth"
+      },
+      "id": "ce03dde1-9b2f-5446-9214-7eefa395779e",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "54bf97b7-d79f-57ea-9730-f4599a5264b4"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT j.job_id, j.job_type, j.entity_id, j.correlation_id, j.payload, j.attempt, ch.id AS channel_id, ch.name AS channel_name, ch.platforms, ch.clip_min_seconds, ch.clip_max_seconds, ch.rules, ch.timezone, ch.quality_threshold, n.name AS niche_name, n.keywords FROM jobs j LEFT JOIN channels ch ON ch.id = NULLIF(j.payload->>'channel_id','')::uuid LEFT JOIN niches n ON n.id = ch.niche_id WHERE j.job_id = $1::uuid AND j.status = 'running'",
+        "options": {
+          "queryReplacement": "={{ [$('Webhook').first().json.body.job_id] }}"
+        }
+      },
+      "id": "4c98c906-d091-5ea7-86b1-af36bd3e4eb9",
+      "name": "Load Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT cl.clip_id, cl.video_url, ch.clip_min_seconds, ch.clip_max_seconds, (ca_setting('qa_worker_url','\"http://localhost:9100\"'))#>>'{}' AS qa_url, (ca_setting('openshorts_base_url','\"http://localhost:8000\"'))#>>'{}' AS os_base FROM clips cl JOIN channels ch ON ch.id = $2::uuid WHERE cl.clip_id = $1::uuid",
+        "options": {
+          "queryReplacement": "={{ [$json.payload.clip_id, $json.channel_id] }}"
+        }
+      },
+      "id": "685d5e9f-2820-501b-81b1-c24ed1987ee5",
+      "name": "QA Context",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const parseUrl = s => { const m = /^(https?):\\/\\/([A-Za-z0-9.\\-]+)(?::(\\d+))?(\\/[^\\s]*)?$/.exec(String(s || '')); if (!m) return null; return { host: m[2].toLowerCase() + (m[3] ? ':' + m[3] : ''), href: m[0] }; };\nconst c = $input.first().json; const job = $('Load Job').first().json;\nconst v = parseUrl(c.video_url), b = parseUrl(c.os_base), q = parseUrl(c.qa_url);\nif (!v) throw new Error('VALIDATION: clip has no valid video_url'); if (!b || !q) throw new Error('VALIDATION: openshorts_base_url / qa_worker_url malformed');\nif (v.host !== b.host) throw new Error('VALIDATION: clip url host is not the configured clip engine host');\nreturn [{ json: { qa_url: q.href.replace(/\\/+$/, ''), body: { video_url: v.href, min_seconds: c.clip_min_seconds, max_seconds: c.clip_max_seconds, thumb_name: 'c-' + String(c.clip_id).replace(/-/g, '') + '-v' + job.payload.version } } }];"
+      },
+      "id": "f3b1baef-f8a9-53e1-942d-d274099f5278",
+      "name": "Guard QA Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.qa_url }}/qa",
+        "options": {
+          "timeout": 300000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      },
+      "id": "6ad772c6-b2bd-5368-a45b-feb681331acd",
+      "name": "QA Worker",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_visual_qa_store($1::uuid, $2::jsonb) AS result",
+        "options": {
+          "queryReplacement": "={{ [$('Load Job').first().json.job_id, JSON.stringify($json)] }}"
+        }
+      },
+      "id": "be22312e-8f80-51a3-a479-48da25420ca9",
+      "name": "Store Visual QA (+ enqueue approval)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize an error output into {job_id, category, message}. Secrets are redacted before anything is persisted.\nconst j = $input.first().json;\nconst jobId = $('Load Job').first().json.job_id;\nconst raw = JSON.stringify(j.error ?? j).slice(0, 700);\nconst m = raw.match(/\\b([45]\\d\\d)\\b/); const code = m ? +m[1] : 0;\nlet cat = 'UNKNOWN';\nif (/VALIDATION:/.test(raw)) cat = 'VALIDATION';\nelse if (/RIGHTS:/.test(raw)) cat = 'RIGHTS';\nelse if (code === 401 || code === 403 || /unauthori|invalid_grant|token (has )?expired|permission|credentials/i.test(raw)) cat = 'AUTH';\nelse if (code === 429 || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(raw)) cat = 'RATE_LIMIT';\nelse if (code >= 500 || /ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang|timed? ?out/i.test(raw)) cat = 'TRANSIENT';\nelse if (code >= 400) cat = 'VALIDATION';\nconst msg = raw.replace(/(api[_-]?key|key|token|secret|authorization|bearer)[\"'=: ]+[A-Za-z0-9._\\-]{8,}/gi, '$1=[redacted]');\nreturn [{ json: { job_id: jobId, category: cat, message: msg } }];"
+      },
+      "id": "6b8bb4d2-03e5-539b-9d7a-9971f6398d8d",
+      "name": "QA Classify Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_fail($1::uuid, $2, $3)",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id, $json.category, $json.message] }}"
+        }
+      },
+      "id": "43a600d9-e8bc-562f-8202-50abdd536f16",
+      "name": "QA Fail Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1560,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize an error output into {job_id, category, message}. Secrets are redacted before anything is persisted.\nconst j = $input.first().json;\nconst jobId = $('Load Job').first().json.job_id;\nconst raw = JSON.stringify(j.error ?? j).slice(0, 700);\nconst m = raw.match(/\\b([45]\\d\\d)\\b/); const code = m ? +m[1] : 0;\nlet cat = 'UNKNOWN';\nif (/VALIDATION:/.test(raw)) cat = 'VALIDATION';\nelse if (/RIGHTS:/.test(raw)) cat = 'RIGHTS';\nelse if (code === 401 || code === 403 || /unauthori|invalid_grant|token (has )?expired|permission|credentials/i.test(raw)) cat = 'AUTH';\nelse if (code === 429 || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(raw)) cat = 'RATE_LIMIT';\nelse if (code >= 500 || /ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang|timed? ?out/i.test(raw)) cat = 'TRANSIENT';\nelse if (code >= 400) cat = 'VALIDATION';\nconst msg = raw.replace(/(api[_-]?key|key|token|secret|authorization|bearer)[\"'=: ]+[A-Za-z0-9._\\-]{8,}/gi, '$1=[redacted]');\nreturn [{ json: { job_id: jobId, category: cat, message: msg } }];"
+      },
+      "id": "c0a63d72-12cf-5acb-ac16-e04608fa6f98",
+      "name": "Code Error Classify Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        1080
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_fail($1::uuid, $2, $3)",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id, $json.category, $json.message] }}"
+        }
+      },
+      "id": "1128f48e-4dd9-54ab-a39d-ad0bfdc087bb",
+      "name": "Code Error Fail Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2080,
+        1080
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Load Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Job": {
+      "main": [
+        [
+          {
+            "node": "QA Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA Context": {
+      "main": [
+        [
+          {
+            "node": "Guard QA Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard QA Request": {
+      "main": [
+        [
+          {
+            "node": "QA Worker",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Error Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA Worker": {
+      "main": [
+        [
+          {
+            "node": "Store Visual QA (+ enqueue approval)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "QA Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA Classify Error": {
+      "main": [
+        [
+          {
+            "node": "QA Fail Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Error Classify Error": {
+      "main": [
+        [
+          {
+            "node": "Code Error Fail Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "note": "Credentials are NOT embedded. After import, open each node showing a credential warning and select your own credential (see SETUP.md)."
+  }
+}

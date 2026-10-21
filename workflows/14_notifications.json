@@ -1,0 +1,386 @@
+{
+  "id": "cawf140000000000",
+  "name": "CA 14 Notifications (Gmail)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "Only CRITICAL and IMPORTANT rows are evaluated. Allowlist: auth, system, storage, resource, policy, rights, publish, error. Deduplicated at insert. Bodies are re-redacted here. Gmail failures open the 'gmail' circuit (bounded retries). Explicit Send-Approval Gate strictly blocks unapproved outbound dispatches.",
+        "height": 160,
+        "width": 700
+      },
+      "id": "ce6ba607-f197-5465-a583-173f409b82c5",
+      "name": "Read me",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      },
+      "id": "2ec45cc1-58ac-5026-8daa-54fc1ffb43e3",
+      "name": "Every 2 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT n.id, n.level, n.category, n.subject, n.body, (ca_setting('notify_email','\"\"'))#>>'{}' AS email, (ca_setting('email_send_approval','null')) AS approval FROM notifications n WHERE n.status = 'pending' AND n.level IN ('CRITICAL','IMPORTANT') AND n.category IN ('auth','system','storage','resource','policy','rights','publish','error') AND NOT (n.category = 'publish' AND n.subject LIKE 'Published on%') AND ca_circuit_allowed('gmail') ORDER BY (n.level = 'CRITICAL') DESC, n.created_at LIMIT 10 FOR UPDATE SKIP LOCKED",
+        "options": {}
+      },
+      "id": "ab0f2fd2-3903-5942-98ac-fc11b7f02eb4",
+      "name": "Claim Pending",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "cacred0000000001",
+          "name": "CA Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "32d7faa3-1fdf-5980-89f0-00c474755b78",
+              "leftValue": "={{ /^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test($json.email || '') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "35ff0c76-5670-588e-8599-a2ceee57f7f5",
+      "name": "Recipient Configured?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE notifications SET status = 'skipped' WHERE id = $1::uuid",
+        "options": {
+          "queryReplacement": "={{ [$json.id] }}"
+        }
+      },
+      "id": "bfc82e16-3c54-535c-baa4-9eada9d6afe3",
+      "name": "Skip (no recipient)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        780,
+        220
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "cacred0000000001",
+          "name": "CA Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// EXPLICIT SEND-APPROVAL GATE\n// A real outbound email requires fresh, explicit owner approval for the specific notification ID.\n// If approval is absent, null, empty, expired, or mismatched, delivery is strictly blocked.\nconst item = $input.first().json;\nconst approval = item.approval;\n\nlet isApproved = false;\nlet gateReason = 'no_approval_configured';\n\nif (approval && typeof approval === 'object' && approval !== null) {\n  const now = Date.now();\n  const expiresAt = approval.expires_at ? new Date(approval.expires_at).getTime() : 0;\n  \n  if (expiresAt && expiresAt < now) {\n    gateReason = 'approval_expired';\n  } else if (approval.used === true) {\n    gateReason = 'approval_already_used';\n  } else if (approval.approved_notification_id && String(approval.approved_notification_id) === String(item.id)) {\n    isApproved = true;\n    gateReason = 'approved_for_notification_id';\n  } else if (approval.approved_all === true) {\n    // Blanket approval is strictly rejected per Section 5 rules\n    isApproved = false;\n    gateReason = 'blanket_approval_forbidden';\n  } else {\n    gateReason = 'notification_id_mismatch';\n  }\n}\n\nreturn [{\n  json: {\n    ...item,\n    is_approved: isApproved,\n    gate_reason: gateReason\n  }\n}];"
+      },
+      "id": "7a35c24e-4e89-4a92-b43e-908bc21c7d31",
+      "name": "Send Approval Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "b3e94471-46da-52c6-947f-1d843818e874",
+              "leftValue": "={{ $json.is_approved === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f512db49-7c85-5b4d-9014-a9018e692a34",
+      "name": "Send Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE notifications SET status = 'skipped' WHERE id = $1::uuid; SELECT ca_audit('system', 'notification_gate', 'skip_unapproved', 'notification', $1::uuid, 'pending', 'skipped', jsonb_build_object('reason', $2::text, 'recipient', $3::text));",
+        "options": {
+          "queryReplacement": "={{ [$json.id, $json.gate_reason, $json.email] }}"
+        }
+      },
+      "id": "84c90e21-9988-4e12-b912-3298a0d9b456",
+      "name": "Skip (unapproved send)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1300,
+        220
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "cacred0000000001",
+          "name": "CA Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const redact = s => String(s || '').replace(/(api[_-]?key|key|token|secret|authorization|bearer|password)[\"'=: ]+[A-Za-z0-9._\\-]{8,}/gi, '$1=[redacted]');\nreturn $input.all().map(i => ({ json: { id: i.json.id, email: i.json.email, subject: '[' + i.json.level + '] ' + redact(i.json.subject).slice(0, 180), body: redact(i.json.body).slice(0, 3000) + '\\n\\n-- Content Automation System' } }));"
+      },
+      "id": "17d42467-714e-54ca-9f44-61f1e9a30453",
+      "name": "Format And Redact",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "={{ $json.email }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "1326a3fb-13e6-5082-bc0d-7b6fa4cc9325",
+      "name": "Send Gmail",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1560,
+        0
+      ],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "HlFaks9FCQkx6RVj",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE notifications SET status = 'sent', sent_at = now() WHERE id = $1::uuid; UPDATE settings SET value = 'null'::jsonb WHERE key = 'email_send_approval'; SELECT ca_circuit_record('gmail', true);",
+        "options": {
+          "queryReplacement": "={{ [$('Format And Redact').item.json.id] }}"
+        }
+      },
+      "id": "cc02c3b4-b1eb-5415-a230-ad471543085a",
+      "name": "Mark Sent",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1820,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "cacred0000000001",
+          "name": "CA Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE notifications SET status = 'failed' WHERE id = $1::uuid; SELECT ca_circuit_record('gmail', false, $2);",
+        "options": {
+          "queryReplacement": "={{ [$('Format And Redact').item.json.id, JSON.stringify($json.error ?? $json).slice(0, 300)] }}"
+        }
+      },
+      "id": "1d7cfb2e-52d5-51e1-b989-29d9634d5fb6",
+      "name": "Record Gmail Failure",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1820,
+        220
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "cacred0000000001",
+          "name": "CA Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every 2 minutes": {
+      "main": [
+        [
+          {
+            "node": "Claim Pending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Pending": {
+      "main": [
+        [
+          {
+            "node": "Recipient Configured?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recipient Configured?": {
+      "main": [
+        [
+          {
+            "node": "Send Approval Gate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip (no recipient)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Approval Gate": {
+      "main": [
+        [
+          {
+            "node": "Send Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Approved?": {
+      "main": [
+        [
+          {
+            "node": "Format And Redact",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip (unapproved send)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format And Redact": {
+      "main": [
+        [
+          {
+            "node": "Send Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Gmail": {
+      "main": [
+        [
+          {
+            "node": "Mark Sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Gmail Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "note": "Credentials are NOT embedded. After import, open each node showing a credential warning and select your own credential (see SETUP.md)."
+  }
+}

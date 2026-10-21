@@ -1,0 +1,1142 @@
+{
+  "id": "cawf050000000000",
+  "name": "CA 05 Monetization And Policy",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ca-w-policy",
+        "responseMode": "onReceived",
+        "options": {},
+        "authentication": "headerAuth"
+      },
+      "id": "9a5c8b89-1eab-5fe2-aca0-4b33703671ef",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "3ea6c3e9-b457-503f-a2ca-146f34b2116d"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT j.job_id, j.job_type, j.entity_id, j.correlation_id, j.payload, j.attempt, ch.id AS channel_id, ch.name AS channel_name, ch.platforms, ch.clip_min_seconds, ch.clip_max_seconds, ch.rules, ch.timezone, ch.quality_threshold, n.name AS niche_name, n.keywords FROM jobs j LEFT JOIN channels ch ON ch.id = NULLIF(j.payload->>'channel_id','')::uuid LEFT JOIN niches n ON n.id = ch.niche_id WHERE j.job_id = $1::uuid AND j.status = 'running'",
+        "options": {
+          "queryReplacement": "={{ [$('Webhook').first().json.body.job_id] }}"
+        }
+      },
+      "id": "47fbd689-7351-55b0-aaf9-46b1e4717396",
+      "name": "Load Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT s.source_id, s.title, s.creator, s.source_platform, ch.platforms, (SELECT to_jsonb(p) FROM permissions p WHERE p.source_id = s.source_id AND p.status = 'active' ORDER BY created_at DESC LIMIT 1) AS permission, ca_setting('policy_source_urls', '{}'::jsonb) AS policy_urls, (CASE WHEN $3::boolean THEN '{}'::jsonb ELSE (SELECT COALESCE(jsonb_object_agg(platform, summary), '{}'::jsonb) FROM policy_knowledge WHERE expires_at > now()) END) AS cached FROM sources s JOIN channels ch ON ch.id = $2::uuid WHERE s.source_id = $1::uuid",
+        "options": {
+          "queryReplacement": "={{ [$json.entity_id, $json.channel_id, $json.payload.force_refresh === true] }}"
+        }
+      },
+      "id": "212ccbe3-9254-570d-a7f8-b30bdacb7872",
+      "name": "Policy Context",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $input.first().json; const items = [];\nfor (const p of c.platforms) {\n  if (c.cached && c.cached[p]) continue;                                   // fresh cached research is reused (refreshed every policy_refresh_days)\n  for (const u of (c.policy_urls[p] || [])) { if (/^https:\\/\\//.test(u)) items.push({ json: { platform: p, url: u } }); }\n}\nreturn items.length ? items : [{ json: { none: true, cache_ok: c.platforms.every(p => c.cached && c.cached[p]) } }];"
+      },
+      "id": "6a49b979-7143-5009-bae6-4da68c2e495b",
+      "name": "Plan Policy Fetch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "af1704ce-81c6-5c10-9fe0-f08d327870ba",
+              "leftValue": "={{ !$json.none }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "59237c42-2c05-57df-a0d8-ecc212afa3f7",
+      "name": "Need Fetch?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.url }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "ea1653d7-1739-5c69-b3c7-57cdbb84c05a",
+      "name": "Fetch Official Policy Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const plan = $('Plan Policy Fetch').all().map(i => i.json);\nconst byPlat = {}; $input.all().forEach((it, i) => { const p = plan[i]?.platform; if (!p) return;\n  const txt = String(it.json.data ?? it.json).replace(/<script[\\s\\S]*?<\\/script>|<style[\\s\\S]*?<\\/style>|<[^>]+>/g, ' ').replace(/\\s+/g, ' ').slice(0, 9000);\n  byPlat[p] = (byPlat[p] || []).concat([{ url: plan[i].url, text: txt }]); });\nconst c = $('Policy Context').first().json; const job = $('Load Job').first().json;\nconst prompt = `Assess each platform ONLY from the provided policy text (and cached summaries). If the text does not address something, mark it unknown - do not guess.\\n` +\n `Source: \"${c.title}\" by ${c.creator}. Rights record: ${JSON.stringify(c.permission || {})}\\nPlatforms: ${c.platforms.join(', ')}\\n` +\n `Cached summaries: ${JSON.stringify(c.cached || {})}\\nFetched policy text: ${JSON.stringify(byPlat)}\\n\\n` +\n `Return JSON {\"assessments\":[{\"platform\":str,\"monetization_status\":\"pass|conditional|review_required|blocked\",\"policy_risk\":\"low|medium|high|unknown\",\"reasons\":[str],\"required_actions\":[str],\"evidence\":[{\"url\":str,\"note\":str}]}]}. ` +\n `Remember: permission to use content is NOT monetization eligibility. Never write \"guaranteed\", \"definitely safe\".`;\nreturn [{ json: { prompt, system: 'You are a cautious platform-policy analyst. Output valid JSON only. Uncertain => review_required.', byPlat, fetched: Object.keys(byPlat).length > 0 } }];"
+      },
+      "id": "b06d0b7b-3fc9-5aff-87eb-9a15cfefc10e",
+      "name": "Assemble Policy Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $('Policy Context').first().json;\nconst a = c.platforms.map(p => ({ platform: p, rights_status: c.permission?.permission_status || 'unknown', monetization_status: 'review_required', policy_risk: 'unknown',\n  reasons: ['No official policy source URLs are configured (settings.policy_source_urls) and no fresh cached research exists'], required_actions: ['Configure policy_source_urls for ' + p + ' or review the platform policy manually'], evidence: [], checked_at: new Date().toISOString() }));\nreturn [{ json: { assessments: a } }];"
+      },
+      "id": "8470335d-bcbb-5e19-a7ca-d6b1b6ffd8c5",
+      "name": "No Policy Sources Configured",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        360
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "08bd4536-0f48-51f6-bd3a-870d0b9ac200",
+              "leftValue": "={{ $json.cache_ok === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4aa34f11-25d8-56f8-9c34-b0dec94f4196",
+      "name": "Cache Covers Platforms?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1300,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize an error output into {job_id, category, message}. Secrets are redacted before anything is persisted.\nconst j = $input.first().json;\nconst jobId = $('Load Job').first().json.job_id;\nconst raw = JSON.stringify(j.error ?? j).slice(0, 700);\nconst m = raw.match(/\\b([45]\\d\\d)\\b/); const code = m ? +m[1] : 0;\nlet cat = 'UNKNOWN';\nif (/VALIDATION:/.test(raw)) cat = 'VALIDATION';\nelse if (/RIGHTS:/.test(raw)) cat = 'RIGHTS';\nelse if (code === 401 || code === 403 || /unauthori|invalid_grant|token (has )?expired|permission|credentials/i.test(raw)) cat = 'AUTH';\nelse if (code === 429 || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(raw)) cat = 'RATE_LIMIT';\nelse if (code >= 500 || /ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang|timed? ?out/i.test(raw)) cat = 'TRANSIENT';\nelse if (code >= 400) cat = 'VALIDATION';\nconst msg = raw.replace(/(api[_-]?key|key|token|secret|authorization|bearer)[\"'=: ]+[A-Za-z0-9._\\-]{8,}/gi, '$1=[redacted]');\nreturn [{ json: { job_id: jobId, category: cat, message: msg } }];"
+      },
+      "id": "1fd3a31e-7b3c-5f9a-b895-7969d3f22c9d",
+      "name": "Fetch Classify Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_fail($1::uuid, $2, $3)",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id, $json.category, $json.message] }}"
+        }
+      },
+      "id": "88b8cc37-cbf8-5285-9bc1-dbd7da607ec0",
+      "name": "Fetch Fail Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1820,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM ca_pick_model($1::text[], $2::boolean)",
+        "options": {
+          "queryReplacement": "={{ [[\"text\", \"json\"], !!$('Load Job').first().json.payload.use_fallback_provider] }}"
+        }
+      },
+      "id": "c924241f-f4a1-5f95-99d3-c83816f765e3",
+      "name": "Pick Model",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1820,
+        0
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "77cdc88a-1098-556b-b7d2-b7388afcac84",
+              "leftValue": "={{ !!$json.provider }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "15eb7e98-b922-5e7b-9366-70da771b371a",
+      "name": "Model Available?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_fail($1::uuid, $2, $3)",
+        "options": {
+          "queryReplacement": "={{ [$('Load Job').first().json.job_id, 'RESOURCE', 'no enabled model provider is available (quota/circuit/config)'] }}"
+        }
+      },
+      "id": "bb33ddd1-9186-59a0-9c14-307c799d3a14",
+      "name": "No Model - Fail Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2340,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const m = $json; const p = $('Assemble Policy Text').first().json;\nconst body = { system: p.system, prompt: p.prompt };\nreturn [{ json: { provider: m.provider, model: m.model, kind: m.kind, base_url: (m.base_url || '').replace(/\\/+$/, ''), body } }];"
+      },
+      "id": "26690ae9-ecc7-5b5a-97d7-d36929aa1d15",
+      "name": "Build LLM Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2340,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "30792142-70b5-59d9-bc8d-f30428077dbc",
+              "leftValue": "={{ $json.kind === 'gemini' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "22e699ba-08fd-5e39-a708-ace53cc558d1",
+      "name": "Is Gemini?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "86167bc8-e0f9-5b86-ad97-00c7bff6ebe1",
+              "leftValue": "={{ $json.kind === 'openai_compat' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "edce873c-7d90-5afb-ad76-17e545e051e2",
+      "name": "Is OpenAI-compatible?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2860,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.base_url }}/v1beta/models/{{ $json.model }}:generateContent",
+        "options": {
+          "timeout": 120000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: $json.body.system }] }, contents: [{ role: 'user', parts: [{ text: $json.body.prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.4 } }) }}"
+      },
+      "id": "841362bb-019e-5ee2-b481-d978cc673356",
+      "name": "Gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
+        -180
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.base_url }}/chat/completions",
+        "options": {
+          "timeout": 120000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model, temperature: 0.4, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: $json.body.system }, { role: 'user', content: $json.body.prompt }] }) }}"
+      },
+      "id": "7b08ba01-7a99-5bf0-88d0-dce3820cc4da",
+      "name": "OpenAI-compatible (Groq etc.)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3120,
+        180
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.base_url }}/api/chat",
+        "options": {
+          "timeout": 600000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model, stream: false, format: 'json', options: { temperature: 0.4, num_ctx: 8192 }, messages: [{ role: 'system', content: $json.body.system }, { role: 'user', content: $json.body.prompt }] }) }}"
+      },
+      "id": "d16cf94a-4fea-5285-b9f6-425b3442a902",
+      "name": "Ollama (local)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3120,
+        360
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const meta = $('Build LLM Request').first().json; const r = $input.first().json;\nlet text = '';\nif (meta.kind === 'gemini') text = r.candidates?.[0]?.content?.parts?.map(p => p.text).join('') ?? '';\nelse if (meta.kind === 'openai_compat') text = r.choices?.[0]?.message?.content ?? '';\nelse text = r.message?.content ?? '';\ntext = String(text).replace(/^```json|```$/gim, '').trim();\nlet data; try { data = JSON.parse(text); } catch (e) { throw new Error('VALIDATION: model returned non-JSON output'); }\nreturn [{ json: { data, provider: meta.provider, model: meta.model } }];"
+      },
+      "id": "b586144c-bb8a-519a-ae51-73e18455ee20",
+      "name": "Parse LLM JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3380,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_model_result($1, true)",
+        "options": {
+          "queryReplacement": "={{ [$json.provider] }}"
+        }
+      },
+      "id": "ad624a56-1999-5474-be88-83efaaeb8661",
+      "name": "Record Model Success",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_model_result($1, false, $2) AS state, $2::text AS err",
+        "options": {
+          "queryReplacement": "={{ [$('Build LLM Request').first().json.provider, JSON.stringify($json.error ?? $json).slice(0, 300)] }}"
+        }
+      },
+      "id": "8723d106-fcd0-5c9e-9eb4-02b7f8f72bdc",
+      "name": "Record Model Failure",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3380,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize an error output into {job_id, category, message}. Secrets are redacted before anything is persisted.\nconst j = $input.first().json;\nconst jobId = $('Load Job').first().json.job_id;\nconst raw = JSON.stringify(j.error ?? j).slice(0, 700);\nconst m = raw.match(/\\b([45]\\d\\d)\\b/); const code = m ? +m[1] : 0;\nlet cat = 'UNKNOWN';\nif (/VALIDATION:/.test(raw)) cat = 'VALIDATION';\nelse if (/RIGHTS:/.test(raw)) cat = 'RIGHTS';\nelse if (code === 401 || code === 403 || /unauthori|invalid_grant|token (has )?expired|permission|credentials/i.test(raw)) cat = 'AUTH';\nelse if (code === 429 || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(raw)) cat = 'RATE_LIMIT';\nelse if (code >= 500 || /ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang|timed? ?out/i.test(raw)) cat = 'TRANSIENT';\nelse if (code >= 400) cat = 'VALIDATION';\nconst msg = raw.replace(/(api[_-]?key|key|token|secret|authorization|bearer)[\"'=: ]+[A-Za-z0-9._\\-]{8,}/gi, '$1=[redacted]');\nreturn [{ json: { job_id: jobId, category: cat, message: msg } }];"
+      },
+      "id": "6e7877e3-94ad-5151-b1d7-a32d42177cc3",
+      "name": "Model Failure Classify",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3640,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_fail($1::uuid, $2, $3)",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id, $json.category, $json.message] }}"
+        }
+      },
+      "id": "2977f833-2918-5e69-926d-20322f800f17",
+      "name": "Model Failure Fail Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3900,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Parse LLM JSON').first().json.data; const c = $('Policy Context').first().json;\nconst okS = ['pass', 'conditional', 'review_required', 'blocked'], okR = ['low', 'medium', 'high', 'unknown'];\nconst seen = {}; const out = [];\nfor (const a of (d.assessments || [])) { if (!c.platforms.includes(a.platform) || seen[a.platform]) continue; seen[a.platform] = 1;\n  let st = okS.includes(a.monetization_status) ? a.monetization_status : 'review_required'; let risk = okR.includes(a.policy_risk) ? a.policy_risk : 'unknown';\n  const actions = Array.isArray(a.required_actions) ? a.required_actions.slice(0, 8) : [];\n  // Deterministic guard: reused third-party content can never be an unconditional 'pass' - permission != monetization eligibility.\n  if (st === 'pass') { st = 'conditional'; actions.unshift('Add original commentary/transformation; permission alone does not establish monetization eligibility'); }\n  if (!(a.evidence || []).length) { if (st === 'conditional') st = 'review_required'; }              // no evidence => human review\n  out.push({ platform: a.platform, rights_status: c.permission?.permission_status || 'unknown', monetization_status: st, policy_risk: risk,\n    reasons: (a.reasons || []).slice(0, 8), required_actions: actions, evidence: (a.evidence || []).slice(0, 6), checked_at: new Date().toISOString() }); }\nfor (const p of c.platforms) if (!seen[p]) out.push({ platform: p, rights_status: c.permission?.permission_status || 'unknown', monetization_status: 'review_required', policy_risk: 'unknown',\n  reasons: ['Model returned no assessment for this platform'], required_actions: ['Manual policy review'], evidence: [], checked_at: new Date().toISOString() });\nreturn [{ json: { assessments: out } }];"
+      },
+      "id": "f746f008-6cd2-504d-a0ae-c3d8bce6f339",
+      "name": "Validate Assessments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2340,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_policy_store($1::uuid, $2::jsonb, $3::boolean) AS result",
+        "options": {
+          "queryReplacement": "={{ [$('Load Job').first().json.job_id, JSON.stringify($json.assessments), $('Assemble Policy Text').first().json.fetched === true] }}"
+        }
+      },
+      "id": "a4da0572-179a-5038-927c-28e9bd72cb8a",
+      "name": "Store Assessments (+ enqueue clipping unless blocked)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ca-api-policy-review",
+        "responseMode": "responseNode",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "a628e9d7-fe4b-5267-b625-c304d95e77fb",
+      "name": "API Policy Review",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        1080
+      ],
+      "webhookId": "8da259cc-7c9f-5ef6-9218-4d97ea1fa916"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || {};\nif (!/^[0-9a-f-]{36}$/i.test(b.source_id || '')) throw new Error('VALIDATION: source_id must be a UUID');\nif (!['approved', 'rejected', 'changes_requested'].includes(b.decision)) throw new Error('VALIDATION: decision must be approved|rejected|changes_requested');\nif (!String(b.reason || '').trim()) throw new Error('VALIDATION: reason is required'); if (!String(b.reviewer || '').trim()) throw new Error('VALIDATION: reviewer is required');\nif (b.platform && !['youtube', 'instagram', 'facebook'].includes(b.platform)) throw new Error('VALIDATION: platform');\nreturn [{ json: { source_id: b.source_id, decision: b.decision, reason: String(b.reason).slice(0, 1000), reviewer: String(b.reviewer).slice(0, 80), platform: b.platform || null,\n  content_id: /^[0-9a-f-]{36}$/i.test(b.content_id || '') ? b.content_id : null, content_version: Number.isInteger(b.content_version) ? b.content_version : null, evidence: Array.isArray(b.evidence) ? b.evidence.slice(0, 10) : [] } }];"
+      },
+      "id": "8d402c3f-aa71-5dbd-9c87-acefaf551a96",
+      "name": "Validate Review Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        1080
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_policy_review($1::jsonb) AS result",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json)] }}"
+        }
+      },
+      "id": "febc0fe6-2891-55db-9c2a-ab3b3e1d4e84",
+      "name": "Apply Policy Review",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        1080
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Maps a database/validation outcome to an HTTP status + structured JSON. No stack traces / internals are ever returned.\nconst clean = m => String(m || '').replace(/^\"+|\"+$/g, '').replace(/^(?:Error: )?(?:VALIDATION: )?/, '').replace(/ \\[line \\d+\\]$/, '').slice(0, 300);\nconst e = $input.first().json; return [{ json: { status: 400, body: { ok: false, error: 'VALIDATION', message: clean(e.error?.message ?? e.error ?? e.message) } } }];"
+      },
+      "id": "f541e829-c6e9-5468-ba84-58e02e27e505",
+      "name": "API Validation Error (Policy Review)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        1440
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Maps a database/validation outcome to an HTTP status + structured JSON. No stack traces / internals are ever returned.\nconst clean = m => String(m || '').replace(/^\"+|\"+$/g, '').replace(/^(?:Error: )?(?:VALIDATION: )?/, '').replace(/ \\[line \\d+\\]$/, '').slice(0, 300);\nconst j = $input.first().json; const r = (j.result !== undefined && j.result !== null) ? j.result : j;\nif (r && r.ok === false) {\n  const code = String(r.error || 'CONFLICT'); const map = { not_found: 404, NOT_FOUND: 404, stale_version: 409, CONFLICT: 409, blocked_assessment_cannot_be_approved: 409, not_awaiting: 409, no_schedule: 404, not_editable: 409, conflict_min_gap: 409, in_the_past: 422, already_published: 409, no_active_assessment: 404 };\n  const status = map[code] || 400; const kind = status === 404 ? 'NOT_FOUND' : status === 409 ? 'CONFLICT' : status === 422 ? 'UNPROCESSABLE' : 'VALIDATION';\n  return [{ json: { status, body: { ok: false, error: kind, code, message: clean(r.message || code.replace(/_/g, ' ')), details: r } } }];\n}\nreturn [{ json: { status: 200, body: { ok: true, ...(typeof r === 'object' ? r : { result: r }) } } }];"
+      },
+      "id": "c8bea2b8-a6e5-56e3-8612-d373ec224a1d",
+      "name": "API Format Result (Policy Review)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        1620
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Maps a database/validation outcome to an HTTP status + structured JSON. No stack traces / internals are ever returned.\nconst clean = m => String(m || '').replace(/^\"+|\"+$/g, '').replace(/^(?:Error: )?(?:VALIDATION: )?/, '').replace(/ \\[line \\d+\\]$/, '').slice(0, 300);\nconst e = $input.first().json; const raw = String(e.error?.message ?? e.error ?? e.message ?? '');\nif (/VALIDATION:/.test(raw)) return [{ json: { status: 400, body: { ok: false, error: 'VALIDATION', message: clean(raw) } } }];\nif (/invalid input syntax|violates (check|foreign|unique|not-null)|duplicate key/i.test(raw)) return [{ json: { status: 422, body: { ok: false, error: 'UNPROCESSABLE', message: 'request conflicts with stored data or has an invalid value' } } }];\nreturn [{ json: { status: 500, body: { ok: false, error: 'INTERNAL', message: 'internal error; see error log' } } }];"
+      },
+      "id": "0020b6a0-c230-5cb2-972f-a0be8ea54b75",
+      "name": "API DB Error (Policy Review)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "responseCode": "={{ $json.status }}"
+        }
+      },
+      "id": "175b96b8-6789-5be7-9587-b349431546a3",
+      "name": "API Respond (Policy Review)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1820,
+        1620
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize an error output into {job_id, category, message}. Secrets are redacted before anything is persisted.\nconst j = $input.first().json;\nconst jobId = $('Load Job').first().json.job_id;\nconst raw = JSON.stringify(j.error ?? j).slice(0, 700);\nconst m = raw.match(/\\b([45]\\d\\d)\\b/); const code = m ? +m[1] : 0;\nlet cat = 'UNKNOWN';\nif (/VALIDATION:/.test(raw)) cat = 'VALIDATION';\nelse if (/RIGHTS:/.test(raw)) cat = 'RIGHTS';\nelse if (code === 401 || code === 403 || /unauthori|invalid_grant|token (has )?expired|permission|credentials/i.test(raw)) cat = 'AUTH';\nelse if (code === 429 || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(raw)) cat = 'RATE_LIMIT';\nelse if (code >= 500 || /ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang|timed? ?out/i.test(raw)) cat = 'TRANSIENT';\nelse if (code >= 400) cat = 'VALIDATION';\nconst msg = raw.replace(/(api[_-]?key|key|token|secret|authorization|bearer)[\"'=: ]+[A-Za-z0-9._\\-]{8,}/gi, '$1=[redacted]');\nreturn [{ json: { job_id: jobId, category: cat, message: msg } }];"
+      },
+      "id": "005b3f68-b543-5bdd-ab36-0bbeb60902b6",
+      "name": "Code Error Classify Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4160,
+        1080
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_fail($1::uuid, $2, $3)",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id, $json.category, $json.message] }}"
+        }
+      },
+      "id": "88b7e6f7-c6ad-5842-8715-61135b4fd5fb",
+      "name": "Code Error Fail Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        4420,
+        1080
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Load Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Job": {
+      "main": [
+        [
+          {
+            "node": "Policy Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Policy Context": {
+      "main": [
+        [
+          {
+            "node": "Plan Policy Fetch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Policy Fetch": {
+      "main": [
+        [
+          {
+            "node": "Need Fetch?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Error Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Need Fetch?": {
+      "main": [
+        [
+          {
+            "node": "Fetch Official Policy Page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cache Covers Platforms?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Official Policy Page": {
+      "main": [
+        [
+          {
+            "node": "Assemble Policy Text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cache Covers Platforms?": {
+      "main": [
+        [
+          {
+            "node": "Assemble Policy Text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Policy Sources Configured",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Classify Error": {
+      "main": [
+        [
+          {
+            "node": "Fetch Fail Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Model": {
+      "main": [
+        [
+          {
+            "node": "Model Available?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Model Available?": {
+      "main": [
+        [
+          {
+            "node": "Build LLM Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Model - Fail Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build LLM Request": {
+      "main": [
+        [
+          {
+            "node": "Is Gemini?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Error Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Gemini?": {
+      "main": [
+        [
+          {
+            "node": "Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is OpenAI-compatible?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is OpenAI-compatible?": {
+      "main": [
+        [
+          {
+            "node": "OpenAI-compatible (Groq etc.)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ollama (local)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini": {
+      "main": [
+        [
+          {
+            "node": "Parse LLM JSON",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Model Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI-compatible (Groq etc.)": {
+      "main": [
+        [
+          {
+            "node": "Parse LLM JSON",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Model Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama (local)": {
+      "main": [
+        [
+          {
+            "node": "Parse LLM JSON",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Model Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse LLM JSON": {
+      "main": [
+        [
+          {
+            "node": "Record Model Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Error Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Model Failure": {
+      "main": [
+        [
+          {
+            "node": "Model Failure Classify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Model Failure Classify": {
+      "main": [
+        [
+          {
+            "node": "Model Failure Fail Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Model Success": {
+      "main": [
+        [
+          {
+            "node": "Validate Assessments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble Policy Text": {
+      "main": [
+        [
+          {
+            "node": "Pick Model",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Error Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Assessments": {
+      "main": [
+        [
+          {
+            "node": "Store Assessments (+ enqueue clipping unless blocked)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Error Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Policy Sources Configured": {
+      "main": [
+        [
+          {
+            "node": "Store Assessments (+ enqueue clipping unless blocked)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Error Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Policy Review": {
+      "main": [
+        [
+          {
+            "node": "Validate Review Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Review Input": {
+      "main": [
+        [
+          {
+            "node": "Apply Policy Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "API Validation Error (Policy Review)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Policy Review": {
+      "main": [
+        [
+          {
+            "node": "API Format Result (Policy Review)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "API DB Error (Policy Review)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Validation Error (Policy Review)": {
+      "main": [
+        [
+          {
+            "node": "API Respond (Policy Review)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Format Result (Policy Review)": {
+      "main": [
+        [
+          {
+            "node": "API Respond (Policy Review)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API DB Error (Policy Review)": {
+      "main": [
+        [
+          {
+            "node": "API Respond (Policy Review)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Error Classify Error": {
+      "main": [
+        [
+          {
+            "node": "Code Error Fail Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "note": "Credentials are NOT embedded. After import, open each node showing a credential warning and select your own credential (see SETUP.md)."
+  }
+}

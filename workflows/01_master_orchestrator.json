@@ -1,0 +1,214 @@
+{
+  "id": "cawf010000000000",
+  "name": "CA 01 Master Orchestrator",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "Master dispatcher. Every 15s claims ONE job from PostgreSQL (ca_claim_job honours concurrency, CPU/RAM/disk limits, circuit breakers, system_paused) and calls the worker workflow's webhook. Worker paths come from the job_type_config allowlist table; the base URL from settings. No workflow IDs are referenced.",
+        "height": 140,
+        "width": 640
+      },
+      "id": "fee162cd-34a5-5a40-8f3e-539b0e36d4ef",
+      "name": "Read me",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "f781f3db-6144-558c-ad5f-c3c7b5974963",
+      "name": "Tick (15s)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT j.job_id, j.job_type, c.webhook_path, (ca_setting('n8n_webhook_base','\"http://localhost:5678\"'))#>>'{}' AS base FROM ca_claim_job() j JOIN job_type_config c ON c.job_type = j.job_type",
+        "options": {}
+      },
+      "id": "ff24f93f-b290-5786-ab05-074bffda3db8",
+      "name": "Claim Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.base.replace(/\\/+$/, '') }}/webhook/{{ $json.webhook_path }}",
+        "options": {
+          "timeout": 15000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ job_id: $json.job_id }) }}"
+      },
+      "id": "fb088149-9d0f-5d37-950b-b70e5e8ead8e",
+      "name": "Dispatch Worker",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize an error output into {job_id, category, message}. Secrets are redacted before anything is persisted.\nconst j = $input.first().json;\nconst jobId = $('Claim Job').first().json.job_id;\nconst raw = JSON.stringify(j.error ?? j).slice(0, 700);\nconst m = raw.match(/\\b([45]\\d\\d)\\b/); const code = m ? +m[1] : 0;\nlet cat = 'UNKNOWN';\nif (/VALIDATION:/.test(raw)) cat = 'VALIDATION';\nelse if (/RIGHTS:/.test(raw)) cat = 'RIGHTS';\nelse if (code === 401 || code === 403 || /unauthori|invalid_grant|token (has )?expired|permission|credentials/i.test(raw)) cat = 'AUTH';\nelse if (code === 429 || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(raw)) cat = 'RATE_LIMIT';\nelse if (code >= 500 || /ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang|timed? ?out/i.test(raw)) cat = 'TRANSIENT';\nelse if (code >= 400) cat = 'VALIDATION';\nconst msg = raw.replace(/(api[_-]?key|key|token|secret|authorization|bearer)[\"'=: ]+[A-Za-z0-9._\\-]{8,}/gi, '$1=[redacted]');\nreturn [{ json: { job_id: jobId, category: cat, message: msg } }];"
+      },
+      "id": "45f84fe9-bc40-59ff-81f3-6c229315db1e",
+      "name": "Dispatch Classify Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_fail($1::uuid, $2, $3)",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id, $json.category, $json.message] }}"
+        }
+      },
+      "id": "213db073-4125-52c0-bee1-e5703374f1d8",
+      "name": "Dispatch Fail Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1040,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "44347ae3-56bf-5d5b-a56d-ee71679e3e6a",
+      "name": "Seed research (every 6h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_seed_research() AS seeded",
+        "options": {}
+      },
+      "id": "6be36c31-bde8-51a8-8b4f-d9bff7452cf4",
+      "name": "Seed Research Jobs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        540
+      ]
+    }
+  ],
+  "connections": {
+    "Tick (15s)": {
+      "main": [
+        [
+          {
+            "node": "Claim Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Job": {
+      "main": [
+        [
+          {
+            "node": "Dispatch Worker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispatch Worker": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Dispatch Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispatch Classify Error": {
+      "main": [
+        [
+          {
+            "node": "Dispatch Fail Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Seed research (every 6h)": {
+      "main": [
+        [
+          {
+            "node": "Seed Research Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "note": "Credentials are NOT embedded. After import, open each node showing a credential warning and select your own credential (see SETUP.md)."
+  }
+}

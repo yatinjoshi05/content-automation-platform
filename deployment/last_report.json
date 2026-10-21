@@ -1,0 +1,57 @@
+{
+  "mode": "verify",
+  "at": "2026-10-20T18:48:28.014Z",
+  "fails": 0,
+  "report": [
+    {
+      "area": "n8n health",
+      "status": "PASS",
+      "detail": "HTTP 200"
+    },
+    {
+      "area": "workflows present in n8n",
+      "status": "PASS",
+      "detail": "16 CA workflows (expected >= 15), duplicates would show here"
+    },
+    {
+      "area": "no duplicate workflow names",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "area": "webhook rejects missing key (403)",
+      "status": "PASS",
+      "detail": "HTTP 403"
+    },
+    {
+      "area": "invalid input => HTTP 400 JSON (not 500)",
+      "status": "PASS",
+      "detail": "HTTP 400 {\"ok\":false,\"error\":\"VALIDATION\",\"message\":\"approval_id must be a UUID\"}"
+    },
+    {
+      "area": "smoke: resource snapshot webhook -> DB",
+      "status": "PASS",
+      "detail": "HTTP 200"
+    },
+    {
+      "area": "database reachable + seeded (settings/job types/snapshots)",
+      "status": "PASS",
+      "detail": "41/12/523"
+    },
+    {
+      "area": "no duplicate settings",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "area": "QA worker",
+      "status": "PASS",
+      "detail": "{\"ok\":true,\"active\":0,\"queued\":0,\"concurrency\":1}"
+    },
+    {
+      "area": "OpenShorts reachable",
+      "status": "WARN",
+      "detail": "not reachable: clipping jobs will retry/queue until it is up"
+    }
+  ]
+}

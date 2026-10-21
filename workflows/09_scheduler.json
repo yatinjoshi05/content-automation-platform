@@ -1,0 +1,481 @@
+{
+  "id": "cawf090000000000",
+  "name": "CA 09 Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ca-w-scheduling",
+        "responseMode": "onReceived",
+        "options": {},
+        "authentication": "headerAuth"
+      },
+      "id": "3aa177ef-278e-5b4b-a023-7b06ca3e42ea",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "15376022-da7a-509e-8ba1-fe01afc2be46"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT j.job_id, j.job_type, j.entity_id, j.correlation_id, j.payload, j.attempt, ch.id AS channel_id, ch.name AS channel_name, ch.platforms, ch.clip_min_seconds, ch.clip_max_seconds, ch.rules, ch.timezone, ch.quality_threshold, n.name AS niche_name, n.keywords FROM jobs j LEFT JOIN channels ch ON ch.id = NULLIF(j.payload->>'channel_id','')::uuid LEFT JOIN niches n ON n.id = ch.niche_id WHERE j.job_id = $1::uuid AND j.status = 'running'",
+        "options": {
+          "queryReplacement": "={{ [$('Webhook').first().json.body.job_id] }}"
+        }
+      },
+      "id": "514ef07d-103a-5145-a881-a4cfec44bfe1",
+      "name": "Load Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_schedule_content($1::uuid) AS result",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id] }}"
+        }
+      },
+      "id": "56a9b4b8-e371-5f8b-ae32-260dcff2fa25",
+      "name": "Schedule Content (windows, gap, cap, no duplicates)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "Slots come from channels.preferred_windows (configurable, or auto-updated weekly from analytics when channels.rules.auto_windows=true). Nothing is hard-coded. Publishing always uses content.approved_version. Reschedule endpoint below.",
+        "height": 140,
+        "width": 640
+      },
+      "id": "9d20d539-cd55-5591-8171-237829134884",
+      "name": "Read me",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ca-api-reschedule",
+        "responseMode": "responseNode",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "c317b42c-24f4-5fb2-9582-f9dda956095b",
+      "name": "API Reschedule",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        720
+      ],
+      "webhookId": "ca856822-b6b3-5067-b2d1-34bcb57d5ecb"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || {};\nif (!/^[0-9a-f-]{36}$/i.test(b.content_id || '')) throw new Error('VALIDATION: content_id must be a UUID');\nif (!['youtube', 'instagram', 'facebook'].includes(b.platform)) throw new Error('VALIDATION: unsupported platform');\nconst t = new Date(b.scheduled_at); if (isNaN(t)) throw new Error('VALIDATION: scheduled_at must be ISO-8601 with offset, e.g. 2026-10-02T20:00:00+05:30');\nreturn [{ json: { content_id: b.content_id, platform: b.platform, scheduled_at: t.toISOString() } }];"
+      },
+      "id": "34a3a527-b627-59e7-a3b1-5d9789cc76ca",
+      "name": "Validate API Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        720
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_reschedule($1::uuid, $2, $3::timestamptz) AS result",
+        "options": {
+          "queryReplacement": "={{ [$json.content_id, $json.platform, $json.scheduled_at] }}"
+        }
+      },
+      "id": "60934385-15cd-53d1-8d80-4700342c79d4",
+      "name": "Reschedule",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        720
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ca-api-publication-reconcile",
+        "responseMode": "responseNode",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "c770ee75-74d1-5793-92c8-bb197ebe2969",
+      "name": "API Publication Reconcile",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        1440
+      ],
+      "webhookId": "c84b7732-04aa-5a91-bb68-2d5f3ff884a3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || {};\nif (!/^[0-9a-f-]{36}$/i.test(b.publication_id || '')) throw new Error('VALIDATION: publication_id must be a UUID');\nif (!['published', 'not_published'].includes(b.outcome)) throw new Error('VALIDATION: outcome must be published|not_published');\nif (!String(b.reason || '').trim()) throw new Error('VALIDATION: reason is required (what did you check on the platform?)');\nif (b.outcome === 'published' && !String(b.post_id || '').trim()) throw new Error('VALIDATION: post_id is required to confirm a publication');\nreturn [{ json: { publication_id: b.publication_id, outcome: b.outcome, post_id: b.post_id ? String(b.post_id).slice(0, 200) : null, reason: String(b.reason).slice(0, 500), by: String(b.by || 'owner').slice(0, 80) } }];"
+      },
+      "id": "8b2e49c6-e717-56ad-99a7-0e6ec7d1651f",
+      "name": "Validate Reconcile Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        1440
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_publication_reconcile($1::jsonb) AS result",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json)] }}"
+        }
+      },
+      "id": "9d016782-6b97-59b6-ae86-c2eddc9dedf8",
+      "name": "Reconcile Publication",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        1440
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Maps a database/validation outcome to an HTTP status + structured JSON. No stack traces / internals are ever returned.\nconst clean = m => String(m || '').replace(/^\"+|\"+$/g, '').replace(/^(?:Error: )?(?:VALIDATION: )?/, '').replace(/ \\[line \\d+\\]$/, '').slice(0, 300);\nconst e = $input.first().json; return [{ json: { status: 400, body: { ok: false, error: 'VALIDATION', message: clean(e.error?.message ?? e.error ?? e.message) } } }];"
+      },
+      "id": "8cedb550-e01f-5c82-9567-92aab2e92c30",
+      "name": "API Validation Error (Reschedule)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        1440
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Maps a database/validation outcome to an HTTP status + structured JSON. No stack traces / internals are ever returned.\nconst clean = m => String(m || '').replace(/^\"+|\"+$/g, '').replace(/^(?:Error: )?(?:VALIDATION: )?/, '').replace(/ \\[line \\d+\\]$/, '').slice(0, 300);\nconst j = $input.first().json; const r = (j.result !== undefined && j.result !== null) ? j.result : j;\nif (r && r.ok === false) {\n  const code = String(r.error || 'CONFLICT'); const map = { not_found: 404, NOT_FOUND: 404, stale_version: 409, CONFLICT: 409, blocked_assessment_cannot_be_approved: 409, not_awaiting: 409, no_schedule: 404, not_editable: 409, conflict_min_gap: 409, in_the_past: 422, already_published: 409, no_active_assessment: 404 };\n  const status = map[code] || 400; const kind = status === 404 ? 'NOT_FOUND' : status === 409 ? 'CONFLICT' : status === 422 ? 'UNPROCESSABLE' : 'VALIDATION';\n  return [{ json: { status, body: { ok: false, error: kind, code, message: clean(r.message || code.replace(/_/g, ' ')), details: r } } }];\n}\nreturn [{ json: { status: 200, body: { ok: true, ...(typeof r === 'object' ? r : { result: r }) } } }];"
+      },
+      "id": "a4dc52a4-183d-5f42-8c5c-334f7d04a46f",
+      "name": "API Format Result (Reschedule)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        1620
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Maps a database/validation outcome to an HTTP status + structured JSON. No stack traces / internals are ever returned.\nconst clean = m => String(m || '').replace(/^\"+|\"+$/g, '').replace(/^(?:Error: )?(?:VALIDATION: )?/, '').replace(/ \\[line \\d+\\]$/, '').slice(0, 300);\nconst e = $input.first().json; const raw = String(e.error?.message ?? e.error ?? e.message ?? '');\nif (/VALIDATION:/.test(raw)) return [{ json: { status: 400, body: { ok: false, error: 'VALIDATION', message: clean(raw) } } }];\nif (/invalid input syntax|violates (check|foreign|unique|not-null)|duplicate key/i.test(raw)) return [{ json: { status: 422, body: { ok: false, error: 'UNPROCESSABLE', message: 'request conflicts with stored data or has an invalid value' } } }];\nreturn [{ json: { status: 500, body: { ok: false, error: 'INTERNAL', message: 'internal error; see error log' } } }];"
+      },
+      "id": "d92f76d6-7d51-5a0a-bcd4-4c2ff09e11b6",
+      "name": "API DB Error (Reschedule)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "responseCode": "={{ $json.status }}"
+        }
+      },
+      "id": "0e512f7f-9b21-5187-b977-93ed9c7a808b",
+      "name": "API Respond (Reschedule)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1820,
+        1620
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Maps a database/validation outcome to an HTTP status + structured JSON. No stack traces / internals are ever returned.\nconst clean = m => String(m || '').replace(/^\"+|\"+$/g, '').replace(/^(?:Error: )?(?:VALIDATION: )?/, '').replace(/ \\[line \\d+\\]$/, '').slice(0, 300);\nconst e = $input.first().json; return [{ json: { status: 400, body: { ok: false, error: 'VALIDATION', message: clean(e.error?.message ?? e.error ?? e.message) } } }];"
+      },
+      "id": "dfa53761-9366-542e-8d51-a06ffe7c18c8",
+      "name": "API Validation Error (Publication Reconcile)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        1440
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Maps a database/validation outcome to an HTTP status + structured JSON. No stack traces / internals are ever returned.\nconst clean = m => String(m || '').replace(/^\"+|\"+$/g, '').replace(/^(?:Error: )?(?:VALIDATION: )?/, '').replace(/ \\[line \\d+\\]$/, '').slice(0, 300);\nconst j = $input.first().json; const r = (j.result !== undefined && j.result !== null) ? j.result : j;\nif (r && r.ok === false) {\n  const code = String(r.error || 'CONFLICT'); const map = { not_found: 404, NOT_FOUND: 404, stale_version: 409, CONFLICT: 409, blocked_assessment_cannot_be_approved: 409, not_awaiting: 409, no_schedule: 404, not_editable: 409, conflict_min_gap: 409, in_the_past: 422, already_published: 409, no_active_assessment: 404 };\n  const status = map[code] || 400; const kind = status === 404 ? 'NOT_FOUND' : status === 409 ? 'CONFLICT' : status === 422 ? 'UNPROCESSABLE' : 'VALIDATION';\n  return [{ json: { status, body: { ok: false, error: kind, code, message: clean(r.message || code.replace(/_/g, ' ')), details: r } } }];\n}\nreturn [{ json: { status: 200, body: { ok: true, ...(typeof r === 'object' ? r : { result: r }) } } }];"
+      },
+      "id": "211744bf-2aae-55fd-bd64-017941fd9f77",
+      "name": "API Format Result (Publication Reconcile)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        1620
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Maps a database/validation outcome to an HTTP status + structured JSON. No stack traces / internals are ever returned.\nconst clean = m => String(m || '').replace(/^\"+|\"+$/g, '').replace(/^(?:Error: )?(?:VALIDATION: )?/, '').replace(/ \\[line \\d+\\]$/, '').slice(0, 300);\nconst e = $input.first().json; const raw = String(e.error?.message ?? e.error ?? e.message ?? '');\nif (/VALIDATION:/.test(raw)) return [{ json: { status: 400, body: { ok: false, error: 'VALIDATION', message: clean(raw) } } }];\nif (/invalid input syntax|violates (check|foreign|unique|not-null)|duplicate key/i.test(raw)) return [{ json: { status: 422, body: { ok: false, error: 'UNPROCESSABLE', message: 'request conflicts with stored data or has an invalid value' } } }];\nreturn [{ json: { status: 500, body: { ok: false, error: 'INTERNAL', message: 'internal error; see error log' } } }];"
+      },
+      "id": "6968b529-9de1-585d-8971-f9bbe9054afb",
+      "name": "API DB Error (Publication Reconcile)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "responseCode": "={{ $json.status }}"
+        }
+      },
+      "id": "f0d28e03-c72c-5f80-abcc-32570f724ef2",
+      "name": "API Respond (Publication Reconcile)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1820,
+        1620
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Load Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Job": {
+      "main": [
+        [
+          {
+            "node": "Schedule Content (windows, gap, cap, no duplicates)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Reschedule": {
+      "main": [
+        [
+          {
+            "node": "Validate API Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate API Input": {
+      "main": [
+        [
+          {
+            "node": "Reschedule",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "API Validation Error (Reschedule)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Publication Reconcile": {
+      "main": [
+        [
+          {
+            "node": "Validate Reconcile Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Reconcile Input": {
+      "main": [
+        [
+          {
+            "node": "Reconcile Publication",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "API Validation Error (Publication Reconcile)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reschedule": {
+      "main": [
+        [
+          {
+            "node": "API Format Result (Reschedule)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "API DB Error (Reschedule)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Validation Error (Reschedule)": {
+      "main": [
+        [
+          {
+            "node": "API Respond (Reschedule)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Format Result (Reschedule)": {
+      "main": [
+        [
+          {
+            "node": "API Respond (Reschedule)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API DB Error (Reschedule)": {
+      "main": [
+        [
+          {
+            "node": "API Respond (Reschedule)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reconcile Publication": {
+      "main": [
+        [
+          {
+            "node": "API Format Result (Publication Reconcile)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "API DB Error (Publication Reconcile)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Validation Error (Publication Reconcile)": {
+      "main": [
+        [
+          {
+            "node": "API Respond (Publication Reconcile)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Format Result (Publication Reconcile)": {
+      "main": [
+        [
+          {
+            "node": "API Respond (Publication Reconcile)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API DB Error (Publication Reconcile)": {
+      "main": [
+        [
+          {
+            "node": "API Respond (Publication Reconcile)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "note": "Credentials are NOT embedded. After import, open each node showing a credential warning and select your own credential (see SETUP.md)."
+  }
+}

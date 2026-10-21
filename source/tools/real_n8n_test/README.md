@@ -1,0 +1,2 @@
+# Real-n8n test harness (TEST ONLY)
+Scripts used to run the workflows in a real n8n 2.41.4 (Node 24) with PostgreSQL 16, against `mock_services.js` (mock YouTube API, mock LLM/Ollama, mock OpenShorts incl. signed webhooks, HTTPS policy page). Paths inside the scripts (`/tmp/...`, credentials `n8npass`, key `test-internal-key`) are the sandbox's; adapt before reuse. They are evidence/tools, NOT part of the production setup. `NODE_TLS_REJECT_UNAUTHORIZED=0` in `n8nenv.sh` is for the self-signed mock only - never set it in production.

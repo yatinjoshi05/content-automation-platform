@@ -1,0 +1,295 @@
+{
+  "id": "cawf040000000000",
+  "name": "CA 04 Rights Verification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ca-w-rights",
+        "responseMode": "onReceived",
+        "options": {},
+        "authentication": "headerAuth"
+      },
+      "id": "5aa1de2a-de84-5ca7-b9fd-4a3ef66fa794",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "d7d69814-5967-5531-86c2-648b2447705d"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT j.job_id, j.job_type, j.entity_id, j.correlation_id, j.payload, j.attempt, ch.id AS channel_id, ch.name AS channel_name, ch.platforms, ch.clip_min_seconds, ch.clip_max_seconds, ch.rules, ch.timezone, ch.quality_threshold, n.name AS niche_name, n.keywords FROM jobs j LEFT JOIN channels ch ON ch.id = NULLIF(j.payload->>'channel_id','')::uuid LEFT JOIN niches n ON n.id = ch.niche_id WHERE j.job_id = $1::uuid AND j.status = 'running'",
+        "options": {
+          "queryReplacement": "={{ [$('Webhook').first().json.body.job_id] }}"
+        }
+      },
+      "id": "56d1e3a7-da55-55d4-9f98-b5150034efec",
+      "name": "Load Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_rights_stage($1::uuid) AS gate",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id] }}"
+        }
+      },
+      "id": "3b2c5af0-ae00-5a8f-8953-ffb731bb29a0",
+      "name": "Rights Stage (gate + route)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "Rights gate is deterministic SQL (ca_rights_gate): verified -> policy stage; pending/needs_human_review -> human review (IMPORTANT email); rejected/expired/missing -> hard stop (CRITICAL email). Second entry point below lets you (or the future frontend) resolve a source by supplying evidence.",
+        "height": 140,
+        "width": 640
+      },
+      "id": "3001f341-1d6b-567b-ae30-af3f31598d68",
+      "name": "Read me",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ca-api-source-review",
+        "responseMode": "responseNode",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "e2c8d323-5c5c-5b73-bc2b-1b9bddcbecdc",
+      "name": "API Source Review",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        720
+      ],
+      "webhookId": "368f8af6-c222-56f9-b745-5c10f8b347ad"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || {};\nif (!/^[0-9a-f-]{36}$/i.test(b.source_id || '')) throw new Error('VALIDATION: source_id must be a UUID');\nif (!['verify', 'reject'].includes(b.action)) throw new Error('VALIDATION: action must be verify|reject');\nif (b.action === 'verify' && !String(b.evidence || '').trim()) throw new Error('VALIDATION: evidence is required to verify rights');\nconst allow = ['youtube', 'instagram', 'facebook'];\nreturn [{ json: { source_id: b.source_id, action: b.action, evidence: b.evidence, evidence_url: b.evidence_url || null, allowed_platforms: (b.allowed_platforms || []).filter(p => allow.includes(p)),\n  commercial_use_allowed: b.commercial_use_allowed ?? null, monetization_allowed: b.monetization_allowed ?? null, attribution_required: !!b.attribution_required, attribution_text: b.attribution_text || null, by: b.by || 'owner' } }];"
+      },
+      "id": "34fbd430-238e-510c-9a9f-73927da92fb3",
+      "name": "Validate Review Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        720
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_source_review($1::jsonb) AS result",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json)] }}"
+        }
+      },
+      "id": "6cae084d-be6f-5bb4-b3c5-560900583eae",
+      "name": "Apply Review",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        720
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Maps a database/validation outcome to an HTTP status + structured JSON. No stack traces / internals are ever returned.\nconst clean = m => String(m || '').replace(/^\"+|\"+$/g, '').replace(/^(?:Error: )?(?:VALIDATION: )?/, '').replace(/ \\[line \\d+\\]$/, '').slice(0, 300);\nconst e = $input.first().json; return [{ json: { status: 400, body: { ok: false, error: 'VALIDATION', message: clean(e.error?.message ?? e.error ?? e.message) } } }];"
+      },
+      "id": "f59f1bd8-150d-5a29-921f-c1e15d439289",
+      "name": "API Validation Error (Source Review)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        1440
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Maps a database/validation outcome to an HTTP status + structured JSON. No stack traces / internals are ever returned.\nconst clean = m => String(m || '').replace(/^\"+|\"+$/g, '').replace(/^(?:Error: )?(?:VALIDATION: )?/, '').replace(/ \\[line \\d+\\]$/, '').slice(0, 300);\nconst j = $input.first().json; const r = (j.result !== undefined && j.result !== null) ? j.result : j;\nif (r && r.ok === false) {\n  const code = String(r.error || 'CONFLICT'); const map = { not_found: 404, NOT_FOUND: 404, stale_version: 409, CONFLICT: 409, blocked_assessment_cannot_be_approved: 409, not_awaiting: 409, no_schedule: 404, not_editable: 409, conflict_min_gap: 409, in_the_past: 422, already_published: 409, no_active_assessment: 404 };\n  const status = map[code] || 400; const kind = status === 404 ? 'NOT_FOUND' : status === 409 ? 'CONFLICT' : status === 422 ? 'UNPROCESSABLE' : 'VALIDATION';\n  return [{ json: { status, body: { ok: false, error: kind, code, message: clean(r.message || code.replace(/_/g, ' ')), details: r } } }];\n}\nreturn [{ json: { status: 200, body: { ok: true, ...(typeof r === 'object' ? r : { result: r }) } } }];"
+      },
+      "id": "5c0851e8-8006-5ed4-aac5-15795abbaea6",
+      "name": "API Format Result (Source Review)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        1620
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Maps a database/validation outcome to an HTTP status + structured JSON. No stack traces / internals are ever returned.\nconst clean = m => String(m || '').replace(/^\"+|\"+$/g, '').replace(/^(?:Error: )?(?:VALIDATION: )?/, '').replace(/ \\[line \\d+\\]$/, '').slice(0, 300);\nconst e = $input.first().json; const raw = String(e.error?.message ?? e.error ?? e.message ?? '');\nif (/VALIDATION:/.test(raw)) return [{ json: { status: 400, body: { ok: false, error: 'VALIDATION', message: clean(raw) } } }];\nif (/invalid input syntax|violates (check|foreign|unique|not-null)|duplicate key/i.test(raw)) return [{ json: { status: 422, body: { ok: false, error: 'UNPROCESSABLE', message: 'request conflicts with stored data or has an invalid value' } } }];\nreturn [{ json: { status: 500, body: { ok: false, error: 'INTERNAL', message: 'internal error; see error log' } } }];"
+      },
+      "id": "69d28a52-ffe6-5350-92be-cde10891216c",
+      "name": "API DB Error (Source Review)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "responseCode": "={{ $json.status }}"
+        }
+      },
+      "id": "f7a41d0f-5735-51f7-aee0-356a0c694dd8",
+      "name": "API Respond (Source Review)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1820,
+        1620
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Load Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Job": {
+      "main": [
+        [
+          {
+            "node": "Rights Stage (gate + route)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Source Review": {
+      "main": [
+        [
+          {
+            "node": "Validate Review Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Review Input": {
+      "main": [
+        [
+          {
+            "node": "Apply Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "API Validation Error (Source Review)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Review": {
+      "main": [
+        [
+          {
+            "node": "API Format Result (Source Review)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "API DB Error (Source Review)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Validation Error (Source Review)": {
+      "main": [
+        [
+          {
+            "node": "API Respond (Source Review)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Format Result (Source Review)": {
+      "main": [
+        [
+          {
+            "node": "API Respond (Source Review)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API DB Error (Source Review)": {
+      "main": [
+        [
+          {
+            "node": "API Respond (Source Review)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "note": "Credentials are NOT embedded. After import, open each node showing a credential warning and select your own credential (see SETUP.md)."
+  }
+}

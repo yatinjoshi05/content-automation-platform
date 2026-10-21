@@ -1,0 +1,533 @@
+{
+  "id": "cawf060000000000",
+  "name": "CA 06 Clipping (OpenShorts adapter)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "Clipping-engine ADAPTER, first implementation = OpenShorts (self-hosted). Verified against OpenShorts examples/n8n: POST {base}/api/process {url, acknowledged, webhook_url, webhook_secret}; completion arrives on a signed webhook (X-OpenShorts-Signature: sha256=HMAC(JSON.stringify(body))). No polling. A different engine = a new adapter workflow + clip_engines row.",
+        "height": 140,
+        "width": 640
+      },
+      "id": "f758178c-9ca0-567a-842b-2c43077fc4c4",
+      "name": "Read me",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ca-w-clipping",
+        "responseMode": "onReceived",
+        "options": {},
+        "authentication": "headerAuth"
+      },
+      "id": "c9f0fd01-0ae8-5ee7-a955-357b1a6cfa06",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "84ba6f89-e182-55a8-b256-7afa9151480a"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT j.job_id, j.job_type, j.entity_id, j.correlation_id, j.payload, j.attempt, ch.id AS channel_id, ch.name AS channel_name, ch.platforms, ch.clip_min_seconds, ch.clip_max_seconds, ch.rules, ch.timezone, ch.quality_threshold, n.name AS niche_name, n.keywords FROM jobs j LEFT JOIN channels ch ON ch.id = NULLIF(j.payload->>'channel_id','')::uuid LEFT JOIN niches n ON n.id = ch.niche_id WHERE j.job_id = $1::uuid AND j.status = 'running'",
+        "options": {
+          "queryReplacement": "={{ [$('Webhook').first().json.body.job_id] }}"
+        }
+      },
+      "id": "2a3908ca-4588-5a58-bb9b-614ee58c9194",
+      "name": "Load Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT s.source_id, s.normalized_url, s.status AS source_status, ca_rights_gate(s.source_id, $2::uuid) AS rights, ca_setting('allowed_source_domains','[]'::jsonb) AS allowed, (ca_setting('openshorts_base_url','\"http://localhost:8000\"'))#>>'{}' AS os_base, (ca_setting('n8n_webhook_base','\"http://localhost:5678\"'))#>>'{}' AS n8n_base FROM sources s WHERE s.source_id = $1::uuid",
+        "options": {
+          "queryReplacement": "={{ [$json.entity_id, $json.channel_id] }}"
+        }
+      },
+      "id": "c9ba29b3-8276-5c34-8e21-a3cf0837d90a",
+      "name": "Clip Context",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const parseUrl = s => { const m = /^(https?):\\/\\/([A-Za-z0-9.\\-]+)(?::(\\d+))?(\\/[^\\s]*)?$/.exec(String(s || '')); if (!m) return null; return { protocol: m[1] + ':', hostname: m[2].toLowerCase(), host: m[2].toLowerCase() + (m[3] ? ':' + m[3] : ''), href: m[0] }; };  // n8n Code sandbox has NO URL global (verified on n8n 2.41.4)\nconst c = $input.first().json;\nif (['rights_blocked', 'policy_blocked', 'needs_human_review'].includes(c.source_status)) throw new Error('RIGHTS: source status is ' + c.source_status);\nif (c.rights.decision !== 'verified') throw new Error('RIGHTS: rights gate says ' + c.rights.decision + ' - ' + JSON.stringify(c.rights.reasons));   // rights acknowledgement is only sent after this passes\nconst u = parseUrl(c.normalized_url); if (!u) throw new Error('VALIDATION: bad source url');\nif (u.protocol !== 'https:' || !c.allowed.includes(u.hostname)) throw new Error('VALIDATION: source host not in allowed_source_domains: ' + u.hostname);\nconst base = c.os_base.replace(/\\/+$/, ''); if (!/^https?:\\/\\/[A-Za-z0-9.\\-]+(:\\d+)?$/.test(base)) throw new Error('VALIDATION: openshorts_base_url malformed');\nreturn [{ json: { url: u.href, os_base: base, webhook_url: c.n8n_base.replace(/\\/+$/, '') + '/webhook/ca-openshorts-done' } }];"
+      },
+      "id": "54551add-fdc1-5930-bc98-c4f7384f70cb",
+      "name": "Guard (rights + allowlists)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.os_base }}/api/process",
+        "options": {
+          "timeout": 60000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ url: $json.url, acknowledged: true, webhook_url: $json.webhook_url, webhook_secret: $env.OPENSHORTS_WEBHOOK_SECRET }) }}"
+      },
+      "id": "0d354de2-b630-567b-879c-8cb94c28937f",
+      "name": "OpenShorts Submit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const id = $input.first().json.job_id;\nif (!id || typeof id !== 'string') throw new Error('VALIDATION: unexpected OpenShorts response (no job_id) - check OpenShorts version/API');\nreturn [{ json: { ext: id } }];"
+      },
+      "id": "43efb999-82b6-51b8-8406-6a44a972122c",
+      "name": "Read OpenShorts Job Id",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_wait($1::uuid, $2)",
+        "options": {
+          "queryReplacement": "={{ [$('Load Job').first().json.job_id, $json.ext] }}"
+        }
+      },
+      "id": "9beb95fb-bd2c-5c21-aca8-3fe7e4e5d529",
+      "name": "Mark Waiting For Webhook",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize an error output into {job_id, category, message}. Secrets are redacted before anything is persisted.\nconst j = $input.first().json;\nconst jobId = $('Load Job').first().json.job_id;\nconst raw = JSON.stringify(j.error ?? j).slice(0, 700);\nconst m = raw.match(/\\b([45]\\d\\d)\\b/); const code = m ? +m[1] : 0;\nlet cat = 'UNKNOWN';\nif (/VALIDATION:/.test(raw)) cat = 'VALIDATION';\nelse if (/RIGHTS:/.test(raw)) cat = 'RIGHTS';\nelse if (code === 401 || code === 403 || /unauthori|invalid_grant|token (has )?expired|permission|credentials/i.test(raw)) cat = 'AUTH';\nelse if (code === 429 || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(raw)) cat = 'RATE_LIMIT';\nelse if (code >= 500 || /ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang|timed? ?out/i.test(raw)) cat = 'TRANSIENT';\nelse if (code >= 400) cat = 'VALIDATION';\nconst msg = raw.replace(/(api[_-]?key|key|token|secret|authorization|bearer)[\"'=: ]+[A-Za-z0-9._\\-]{8,}/gi, '$1=[redacted]');\nreturn [{ json: { job_id: jobId, category: cat, message: msg } }];"
+      },
+      "id": "e4b411b2-058e-594a-8956-1c867e28b989",
+      "name": "Submit Classify Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_fail($1::uuid, $2, $3)",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id, $json.category, $json.message] }}"
+        }
+      },
+      "id": "442f3819-0cc2-5b08-ae7b-34df951fdeb6",
+      "name": "Submit Fail Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1560,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ca-openshorts-done",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "cab35c84-ab36-5a2b-b169-2568e57f4292",
+      "name": "OpenShorts Completion Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        900
+      ],
+      "webhookId": "71affed6-8060-5a9a-af83-ec41a1580d6b"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst it = $input.first().json; const secret = $env.OPENSHORTS_WEBHOOK_SECRET;\nif (!secret) return [{ json: { valid: false, why: 'no secret configured' } }];\nconst sig = String((it.headers || {})['x-openshorts-signature'] || '');\nconst expected = 'sha256=' + crypto.createHmac('sha256', secret).update(JSON.stringify(it.body)).digest('hex');\nconst a = Buffer.from(sig), b = Buffer.from(expected);\nconst valid = a.length === b.length && crypto.timingSafeEqual(a, b);\nconst body = it.body || {};\nreturn [{ json: { valid, event: body.event, status: body.status, job_id: body.job_id, clips: Array.isArray(body.clips) ? body.clips.slice(0, 30) : [], error: body.error ? String(body.error).slice(0, 300) : null } }];"
+      },
+      "id": "a0e34e14-587b-5d2c-b8e0-ee5bdb571e3a",
+      "name": "Verify Signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        900
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "0cc7a843-2d66-5579-b164-745a578b9521",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "46923ee5-eaca-59db-bbb2-1b7d3fd90b99",
+      "name": "Signature Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        520,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_audit('external','openshorts_webhook','signature_rejected',NULL,NULL,NULL,NULL,'{}'::jsonb)",
+        "options": {}
+      },
+      "id": "e3b15ac5-4f46-5fbd-bc76-10c074b13458",
+      "name": "Audit Rejected Webhook",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        780,
+        1080
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "1b8ed4d8-9a45-571d-8d74-7b9fff847296",
+              "leftValue": "={{ $json.event === 'job.completed' && $json.status === 'completed' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "bdeb29f8-fadc-565b-a8da-efa6895ae5f5",
+      "name": "Completed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        780,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_ingest_clips($1, 'openshorts', $2::jsonb) AS result",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id, JSON.stringify($json.clips)] }}"
+        }
+      },
+      "id": "91d8b962-ca0f-5fd3-b128-44554bd7db8b",
+      "name": "Ingest Clips (idempotent)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1040,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_fail(job_id, 'TRANSIENT', $2) FROM jobs WHERE external_job_id = $1 AND job_type = 'clipping' AND status = 'waiting'",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id, $json.error || 'OpenShorts job failed'] }}"
+        }
+      },
+      "id": "1d22117c-2791-5207-b4c9-21ec9947b2dd",
+      "name": "Fail Clipping Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1040,
+        1080
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize an error output into {job_id, category, message}. Secrets are redacted before anything is persisted.\nconst j = $input.first().json;\nconst jobId = $('Load Job').first().json.job_id;\nconst raw = JSON.stringify(j.error ?? j).slice(0, 700);\nconst m = raw.match(/\\b([45]\\d\\d)\\b/); const code = m ? +m[1] : 0;\nlet cat = 'UNKNOWN';\nif (/VALIDATION:/.test(raw)) cat = 'VALIDATION';\nelse if (/RIGHTS:/.test(raw)) cat = 'RIGHTS';\nelse if (code === 401 || code === 403 || /unauthori|invalid_grant|token (has )?expired|permission|credentials/i.test(raw)) cat = 'AUTH';\nelse if (code === 429 || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(raw)) cat = 'RATE_LIMIT';\nelse if (code >= 500 || /ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang|timed? ?out/i.test(raw)) cat = 'TRANSIENT';\nelse if (code >= 400) cat = 'VALIDATION';\nconst msg = raw.replace(/(api[_-]?key|key|token|secret|authorization|bearer)[\"'=: ]+[A-Za-z0-9._\\-]{8,}/gi, '$1=[redacted]');\nreturn [{ json: { job_id: jobId, category: cat, message: msg } }];"
+      },
+      "id": "334df5dc-5cdc-5bb9-aa0c-8ace70220c28",
+      "name": "Code Error Classify Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        1080
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca_job_fail($1::uuid, $2, $3)",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id, $json.category, $json.message] }}"
+        }
+      },
+      "id": "e0ea5cb9-1a33-5dc8-85cd-415e094120ca",
+      "name": "Code Error Fail Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2080,
+        1080
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Load Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Job": {
+      "main": [
+        [
+          {
+            "node": "Clip Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clip Context": {
+      "main": [
+        [
+          {
+            "node": "Guard (rights + allowlists)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard (rights + allowlists)": {
+      "main": [
+        [
+          {
+            "node": "OpenShorts Submit",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Error Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenShorts Submit": {
+      "main": [
+        [
+          {
+            "node": "Read OpenShorts Job Id",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Submit Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read OpenShorts Job Id": {
+      "main": [
+        [
+          {
+            "node": "Mark Waiting For Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Error Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit Classify Error": {
+      "main": [
+        [
+          {
+            "node": "Submit Fail Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenShorts Completion Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Signature": {
+      "main": [
+        [
+          {
+            "node": "Signature Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Error Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signature Valid?": {
+      "main": [
+        [
+          {
+            "node": "Completed?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Audit Rejected Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Completed?": {
+      "main": [
+        [
+          {
+            "node": "Ingest Clips (idempotent)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fail Clipping Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Error Classify Error": {
+      "main": [
+        [
+          {
+            "node": "Code Error Fail Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "note": "Credentials are NOT embedded. After import, open each node showing a credential warning and select your own credential (see SETUP.md)."
+  }
+}
