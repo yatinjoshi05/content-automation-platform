@@ -2,7 +2,7 @@
 
 > **Autonomous Multi-Platform Short-Form Video Pipeline • 16 Modular n8n Workflows • CoreUI React Operations Dashboard • PostgreSQL State Engine • Fail-Closed Resilience**
 
-[![Archify 3.2.0 Verified](https://img.shields.io/badge/Archify-3.2.0%20Verified-0ea5e9?style=flat-square)](archify/index.html)
+[![Archify 3.2.0 Verified](https://img.shields.io/badge/Archify-3.2.0%20Verified-0ea5e9?style=flat-square)](https://yatinjoshi05.github.io/content-automation-platform/)
 [![Frontend Build](https://img.shields.io/badge/Frontend-CoreUI%20React%20%2B%20TypeScript-blue)](https://portfolio-yatin-portfolio1.vercel.app/)
 [![Orchestration](https://img.shields.io/badge/Orchestrator-16%20Modular%20n8n%20Workflows-EA4B71)](https://docs.n8n.io/)
 [![Database](https://img.shields.io/badge/State%20Store-PostgreSQL%2016%20%2B%208%20Migrations-336791)](https://www.postgresql.org/)
@@ -64,16 +64,16 @@ Every stage of the production pipeline operates independently through database-b
 
 Every architectural view in this project has been compiled, verified, and audited using the official [Archify 3.2.0](https://tt-a1i.github.io/archify/) engine, passing all 4 gates (**validate**, **deliver**, **check**, and headless **browser-check**) with **0 errors and 0 warnings**.
 
-👉 **[Launch the Unified Interactive Architecture Hub](archify/index.html)**  
-*(Live GitHub Pages Deployment: [https://yatinjoshi05.github.io/content-automation-platform/](https://yatinjoshi05.github.io/content-automation-platform/) — Pending repository Pages enablement in Settings)*
+👉 **[Launch the Unified Interactive Architecture Hub](https://yatinjoshi05.github.io/content-automation-platform/)**  
+*(Live Interactive Web Application — Deployed on GitHub Pages)*
 
 | View | Artifact | Type | Description |
 | :--- | :--- | :--- | :--- |
-| **Master Map** | [content-automation-master.html](archify/content-automation-master.html) | `architecture` | 13-node complete runtime topology from dashboard & n8n to workers & social endpoints. |
-| **View A: Workflow** | [content-automation-workflow.html](archify/content-automation-workflow.html) | `workflow` | 16 decoupled execution lanes detailing trend discovery, synthesis, QA, and distribution. |
-| **View B: Lineage** | [content-automation-dataflow.html](archify/content-automation-dataflow.html) | `dataflow` | 5-stage transformation tracing field lineage into PostgreSQL state engine. |
-| **View C: Sequence** | [content-automation-sequence.html](archify/content-automation-sequence.html) | `sequence` | Chronological request choreography for human approval and YouTube resumable upload. |
-| **View D: Lifecycle** | [content-automation-lifecycle.html](archify/content-automation-lifecycle.html) | `lifecycle` | AI provider failover (Groq + Gemini), quota tracking, and circuit-breaker states. |
+| **Master Map** | [content-automation-master.html](https://yatinjoshi05.github.io/content-automation-platform/content-automation-master.html) | `architecture` | 13-node complete runtime topology from dashboard & n8n to workers & social endpoints. |
+| **View A: Workflow** | [content-automation-workflow.html](https://yatinjoshi05.github.io/content-automation-platform/content-automation-workflow.html) | `workflow` | 16 decoupled execution lanes detailing trend discovery, synthesis, QA, and distribution. |
+| **View B: Lineage** | [content-automation-dataflow.html](https://yatinjoshi05.github.io/content-automation-platform/content-automation-dataflow.html) | `dataflow` | 5-stage transformation tracing field lineage into PostgreSQL state engine. |
+| **View C: Sequence** | [content-automation-sequence.html](https://yatinjoshi05.github.io/content-automation-platform/content-automation-sequence.html) | `sequence` | Chronological request choreography for human approval and YouTube resumable upload. |
+| **View D: Lifecycle** | [content-automation-lifecycle.html](https://yatinjoshi05.github.io/content-automation-platform/content-automation-lifecycle.html) | `lifecycle` | AI provider failover (Groq + Gemini), quota tracking, and circuit-breaker states. |
 
 ### Technical Evidence & Verification Reports
 * 📄 **[Source Evidence Manifest](archify/EVIDENCE_MANIFEST.md)** — Complete mapping of components, routes, workflows, and SQL tables to source files.
