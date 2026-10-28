@@ -2,6 +2,7 @@
 
 > **Autonomous Multi-Platform Short-Form Video Pipeline • 16 Modular n8n Workflows • CoreUI React Operations Dashboard • PostgreSQL State Engine • Fail-Closed Resilience**
 
+[![Archify 3.2.0 Verified](https://img.shields.io/badge/Archify-3.2.0%20Verified-0ea5e9?style=flat-square)](archify/index.html)
 [![Frontend Build](https://img.shields.io/badge/Frontend-CoreUI%20React%20%2B%20TypeScript-blue)](https://portfolio-yatin-portfolio1.vercel.app/)
 [![Orchestration](https://img.shields.io/badge/Orchestrator-16%20Modular%20n8n%20Workflows-EA4B71)](https://docs.n8n.io/)
 [![Database](https://img.shields.io/badge/State%20Store-PostgreSQL%2016%20%2B%208%20Migrations-336791)](https://www.postgresql.org/)
@@ -59,7 +60,32 @@ Every stage of the production pipeline operates independently through database-b
 
 ---
 
-## 3. Technology Stack
+## 3. Interactive Architecture Suite (Powered by Archify 3.2.0)
+
+Every architectural view in this project has been compiled, verified, and audited using the official [Archify 3.2.0](https://tt-a1i.github.io/archify/) engine, passing all 4 gates (**validate**, **deliver**, **check**, and headless **browser-check**) with **0 errors and 0 warnings**.
+
+👉 **[Launch the Unified Interactive Architecture Hub](archify/index.html)**  
+*(Live GitHub Pages Deployment: [https://yatinjoshi05.github.io/content-automation-platform/](https://yatinjoshi05.github.io/content-automation-platform/) — Pending repository Pages enablement in Settings)*
+
+| View | Artifact | Type | Description |
+| :--- | :--- | :--- | :--- |
+| **Master Map** | [content-automation-master.html](archify/content-automation-master.html) | `architecture` | 13-node complete runtime topology from dashboard & n8n to workers & social endpoints. |
+| **View A: Workflow** | [content-automation-workflow.html](archify/content-automation-workflow.html) | `workflow` | 16 decoupled execution lanes detailing trend discovery, synthesis, QA, and distribution. |
+| **View B: Lineage** | [content-automation-dataflow.html](archify/content-automation-dataflow.html) | `dataflow` | 5-stage transformation tracing field lineage into PostgreSQL state engine. |
+| **View C: Sequence** | [content-automation-sequence.html](archify/content-automation-sequence.html) | `sequence` | Chronological request choreography for human approval and YouTube resumable upload. |
+| **View D: Lifecycle** | [content-automation-lifecycle.html](archify/content-automation-lifecycle.html) | `lifecycle` | AI provider failover (Groq + Gemini), quota tracking, and circuit-breaker states. |
+
+### Technical Evidence & Verification Reports
+* 📄 **[Source Evidence Manifest](archify/EVIDENCE_MANIFEST.md)** — Complete mapping of components, routes, workflows, and SQL tables to source files.
+* 🛡️ **[Verification & QA Report](archify/VERIFICATION_REPORT.md)** — Automated test logs, 9/9 Archify checks, delivery receipts, and security audit.
+* 🔍 **[Self-Critique & Improvement Report](archify/CRITIQUE_AND_IMPROVEMENT_REPORT.md)** — Iterative refinement records, schema adaptations, and layout resolutions.
+* 📊 **[Portfolio Progress Report](archify/PORTFOLIO_PROGRESS_REPORT.md)** — Master loop lifecycle and delivery provenance ledger.
+
+> **Truth Classification Note:** All diagrams reflect the actual implemented codebase reviewed in this repository (`workflows/`, `database/`, `server/`, and `workers/`). External live publishing to YouTube/Meta is classified as *Code Reviewed / Mock Tested* and requires active third-party API credentials to execute in a live environment.
+
+---
+
+## 4. Technology Stack
 
 | Layer | Technologies | Responsibility |
 | :--- | :--- | :--- |
@@ -72,7 +98,7 @@ Every stage of the production pipeline operates independently through database-b
 
 ---
 
-## 4. Verification & Automated Test Results
+## 5. Verification & Automated Test Results
 
 The platform includes 7 comprehensive test suites validating security, module resolution, and fail-closed architecture:
 
@@ -96,7 +122,7 @@ CONTENT AUTOMATION: MASTER TEST EXECUTION SUITE
 
 ---
 
-## 5. Local Setup & Quickstart
+## 6. Local Setup & Quickstart
 
 ### Prerequisites
 * **Node.js:** `>= 22.5.0` (required for built-in `node:sqlite`)
@@ -168,7 +194,7 @@ The operations dashboard will be live at `http://localhost:3001`.
 
 ---
 
-## 6. Honest Operational Limitations
+## 7. Honest Operational Limitations
 
 In accordance with strict engineering integrity standards, the following boundaries represent the verified state of the codebase:
 * **Live Social Publishing:** The YouTube Data API v3 and Meta Reels publishing adapters are implemented and unit-tested with mocked payloads, but live production distribution requires the operator to provide active OAuth client credentials in n8n.
@@ -177,7 +203,7 @@ In accordance with strict engineering integrity standards, the following boundar
 
 ---
 
-## 7. Author & Connect
+## 8. Author & Connect
 
 **Yatin Joshi**  
 Entry-Level Go-To-Market (GTM) Systems & Revenue Automation Engineer  
@@ -188,6 +214,6 @@ Entry-Level Go-To-Market (GTM) Systems & Revenue Automation Engineer
 
 ---
 
-## 8. License
+## 9. License
 
 This repository is shared for technical review, architectural demonstration, and portfolio evaluation. All rights reserved by the author. Licensing recommendations for commercial or open-source distribution are available upon request.
