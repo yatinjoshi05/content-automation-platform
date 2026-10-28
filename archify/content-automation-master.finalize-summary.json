@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "command": "finalize",
+  "status": "fail",
+  "type": "architecture",
+  "quality": "showcase",
+  "specification": {
+    "path": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\.archify\\master-arch\\candidate.json",
+    "sha256": "16ed5076330fe74e46bf28570fddf5f8bd41073476afd15842ef2aba18cca64c",
+    "bytes": 10112
+  },
+  "artifact": {
+    "path": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-master.html",
+    "sha256": "eebdcd8532a7529058cb3ce6f58a4ab6056f8807a2e62730c8e982de32871c41",
+    "bytes": 888368
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "fail"
+  },
+  "failedStage": "browser-check",
+  "diagnostics": [
+    {
+      "code": "viewer/temp-cleanup-incomplete",
+      "severity": "error",
+      "message": "Browser cleanup could not safely finish; inspect the reported retained path.",
+      "subject": {
+        "artifact": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-master.html"
+      },
+      "evidence": {
+        "reason": "Chrome did not exit; retained temporary profile \"C:\\Users\\H\\AppData\\Local\\Temp\\archify-visual-check-profile-ApdkhA\".",
+        "retainedDirectory": "C:\\Users\\H\\AppData\\Local\\Temp\\archify-visual-check-profile-ApdkhA"
+      },
+      "supportedFixes": [
+        "resolve the reported process or filesystem failure; verify directory ownership before manual cleanup"
+      ]
+    }
+  ],
+  "diagnosticSummary": {
+    "total": 1,
+    "shown": 1,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-master.finalize.json",
+    "summaryReceipt": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-master.finalize-summary.json",
+    "browserCheckReceipt": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-master.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.2.0",
+    "availableVersion": "3.2.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-10-28T07:48:24.353Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 20450,
+  "browserCheck": {
+    "requested": true,
+    "ran": false
+  }
+}

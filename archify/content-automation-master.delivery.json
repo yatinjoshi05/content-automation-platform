@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "d633dad7-dd0b-46ae-b58f-e34b9573d952",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\.archify\\master-arch\\candidate.json",
+  "output": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-master.html",
+  "specification": {
+    "sha256": "16ed5076330fe74e46bf28570fddf5f8bd41073476afd15842ef2aba18cca64c",
+    "bytes": 10112
+  },
+  "artifact": {
+    "sha256": "eebdcd8532a7529058cb3ce6f58a4ab6056f8807a2e62730c8e982de32871c41",
+    "bytes": 888368
+  }
+}

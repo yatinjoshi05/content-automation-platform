@@ -1,0 +1,200 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "command": "finalize",
+  "status": "fail",
+  "type": "workflow",
+  "quality": "showcase",
+  "specification": {
+    "path": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\.archify\\workflow\\candidate.json",
+    "sha256": "a8f3b39a251c8c67950e9ac3a7f33d5816c59317f537b140e94d2b9e389bc757",
+    "bytes": 6278
+  },
+  "artifact": {
+    "path": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-workflow.html"
+  },
+  "gates": {
+    "validate": "fail",
+    "deliver": "not-run",
+    "check": "not-run",
+    "browser-check": "not-run"
+  },
+  "failedStage": "validate",
+  "diagnostics": [
+    {
+      "code": "schema/maximum",
+      "severity": "error",
+      "message": "/phases/2/toCol (id/label: \"phase_qa_approval\") must be <= 5",
+      "subject": {
+        "diagramType": "workflow",
+        "path": "/phases/2/toCol",
+        "identity": "phase_qa_approval"
+      },
+      "evidence": {
+        "keyword": "maximum",
+        "comparison": "<=",
+        "limit": 5
+      },
+      "supportedFixes": [
+        "use a value <= 5"
+      ]
+    },
+    {
+      "code": "schema/maximum",
+      "severity": "error",
+      "message": "/phases/3/fromCol (id/label: \"phase_delivery\") must be <= 5",
+      "subject": {
+        "diagramType": "workflow",
+        "path": "/phases/3/fromCol",
+        "identity": "phase_delivery"
+      },
+      "evidence": {
+        "keyword": "maximum",
+        "comparison": "<=",
+        "limit": 5
+      },
+      "supportedFixes": [
+        "use a value <= 5"
+      ]
+    },
+    {
+      "code": "schema/maximum",
+      "severity": "error",
+      "message": "/phases/3/toCol (id/label: \"phase_delivery\") must be <= 5",
+      "subject": {
+        "diagramType": "workflow",
+        "path": "/phases/3/toCol",
+        "identity": "phase_delivery"
+      },
+      "evidence": {
+        "keyword": "maximum",
+        "comparison": "<=",
+        "limit": 5
+      },
+      "supportedFixes": [
+        "use a value <= 5"
+      ]
+    },
+    {
+      "code": "schema/maximum",
+      "severity": "error",
+      "message": "/nodes/9/col (id/label: \"wf_08\") must be <= 5",
+      "subject": {
+        "diagramType": "workflow",
+        "path": "/nodes/9/col",
+        "identity": "wf_08"
+      },
+      "evidence": {
+        "keyword": "maximum",
+        "comparison": "<=",
+        "limit": 5
+      },
+      "supportedFixes": [
+        "use a value <= 5"
+      ]
+    },
+    {
+      "code": "schema/maximum",
+      "severity": "error",
+      "message": "/nodes/10/col (id/label: \"wf_09\") must be <= 5",
+      "subject": {
+        "diagramType": "workflow",
+        "path": "/nodes/10/col",
+        "identity": "wf_09"
+      },
+      "evidence": {
+        "keyword": "maximum",
+        "comparison": "<=",
+        "limit": 5
+      },
+      "supportedFixes": [
+        "use a value <= 5"
+      ]
+    },
+    {
+      "code": "schema/maximum",
+      "severity": "error",
+      "message": "/nodes/11/col (id/label: \"wf_10\") must be <= 5",
+      "subject": {
+        "diagramType": "workflow",
+        "path": "/nodes/11/col",
+        "identity": "wf_10"
+      },
+      "evidence": {
+        "keyword": "maximum",
+        "comparison": "<=",
+        "limit": 5
+      },
+      "supportedFixes": [
+        "use a value <= 5"
+      ]
+    },
+    {
+      "code": "schema/maximum",
+      "severity": "error",
+      "message": "/nodes/12/col (id/label: \"wf_11\") must be <= 5",
+      "subject": {
+        "diagramType": "workflow",
+        "path": "/nodes/12/col",
+        "identity": "wf_11"
+      },
+      "evidence": {
+        "keyword": "maximum",
+        "comparison": "<=",
+        "limit": 5
+      },
+      "supportedFixes": [
+        "use a value <= 5"
+      ]
+    },
+    {
+      "code": "schema/maximum",
+      "severity": "error",
+      "message": "/nodes/15/col (id/label: \"wf_14\") must be <= 5",
+      "subject": {
+        "diagramType": "workflow",
+        "path": "/nodes/15/col",
+        "identity": "wf_14"
+      },
+      "evidence": {
+        "keyword": "maximum",
+        "comparison": "<=",
+        "limit": 5
+      },
+      "supportedFixes": [
+        "use a value <= 5"
+      ]
+    }
+  ],
+  "diagnosticSummary": {
+    "total": 8,
+    "shown": 8,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-workflow.finalize.json",
+    "summaryReceipt": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-workflow.finalize-summary.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.2.0",
+    "availableVersion": "3.2.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-10-28T07:48:24.353Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 2833,
+  "browserCheck": {
+    "requested": true,
+    "ran": false
+  },
+  "nextAction": {
+    "action": "edit-in-place",
+    "candidate": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\.archify\\workflow\\candidate.json",
+    "constraint": "Preserve unaffected semantics and geometry; apply each diagnostic's supportedFixes, or the fix its message names, and do not replace the whole candidate.",
+    "then": "finalize-once"
+  }
+}

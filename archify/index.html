@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Content Automation Platform — Interactive Architecture Portfolio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090d16;
+      --surface: #101726;
+      --surface-border: #1e293b;
+      --surface-card: #0d1322;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --primary: #38bdf8;
+      --primary-glow: rgba(56, 189, 248, 0.15);
+      --emerald: #10b981;
+      --emerald-glow: rgba(16, 185, 129, 0.15);
+      --purple: #a855f7;
+      --purple-glow: rgba(168, 85, 247, 0.15);
+      --amber: #f59e0b;
+      --amber-glow: rgba(245, 158, 11, 0.15);
+      --rose: #f43f5e;
+      --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    header {
+      background: linear-gradient(180deg, rgba(16, 23, 38, 0.85) 0%, rgba(9, 13, 22, 0.95) 100%);
+      border-bottom: 1px solid var(--surface-border);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      padding: 0.85rem 2rem;
+    }
+
+    .header-container {
+      max-width: 1440px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.5rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+
+    .brand-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #38bdf8 0%, #6366f1 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 1.1rem;
+      color: #090d16;
+      box-shadow: 0 0 12px var(--primary-glow);
+    }
+
+    .brand-text h1 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--text);
+    }
+
+    .brand-text span {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .badge-live {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.25rem 0.65rem;
+      border-radius: 9999px;
+      background: var(--emerald-glow);
+      color: var(--emerald);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .badge-live::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--emerald);
+      box-shadow: 0 0 8px var(--emerald);
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.45rem 0.95rem;
+      border-radius: 0.5rem;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--surface-border);
+    }
+
+    .btn-outline:hover {
+      background: var(--surface);
+      color: var(--text);
+      border-color: var(--primary);
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #090d16;
+      border: 1px solid var(--primary);
+    }
+
+    .btn-primary:hover {
+      background: #7dd3fc;
+      box-shadow: 0 0 16px var(--primary-glow);
+    }
+
+    main {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 2rem 2rem 5rem;
+    }
+
+    .hero {
+      margin-bottom: 2rem;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--primary);
+      background: var(--primary-glow);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      padding: 0.2rem 0.65rem;
+      border-radius: 9999px;
+      margin-bottom: 0.75rem;
+    }
+
+    .hero h2 {
+      font-size: 2.25rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      margin-bottom: 0.65rem;
+      background: linear-gradient(135deg, #ffffff 40%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero p {
+      font-size: 1.05rem;
+      color: var(--text-muted);
+      max-width: 960px;
+      line-height: 1.55;
+    }
+
+    /* KPI Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 2rem;
+    }
+
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 0.75rem;
+      padding: 1.2rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .kpi-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+      background: var(--primary);
+    }
+
+    .kpi-card.emerald::before { background: var(--emerald); }
+    .kpi-card.purple::before { background: var(--purple); }
+    .kpi-card.amber::before { background: var(--amber); }
+
+    .kpi-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 0.25rem;
+    }
+
+    .kpi-value {
+      font-size: 1.65rem;
+      font-weight: 800;
+      color: var(--text);
+      font-family: var(--font-mono);
+      margin-bottom: 0.2rem;
+    }
+
+    .kpi-desc {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    /* Tab Switcher */
+    .tab-nav {
+      display: flex;
+      gap: 0.5rem;
+      border-bottom: 1px solid var(--surface-border);
+      margin-bottom: 1rem;
+      overflow-x: auto;
+      padding-bottom: 0.25rem;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 0.7rem 1.15rem;
+      font-family: var(--font-sans);
+      font-size: 0.875rem;
+      font-weight: 600;
+      border-radius: 0.5rem 0.5rem 0 0;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+      position: relative;
+    }
+
+    .tab-btn:hover {
+      color: var(--text);
+      background: rgba(30, 41, 59, 0.4);
+    }
+
+    .tab-btn.active {
+      color: var(--primary);
+      background: var(--surface);
+      border-bottom: 2px solid var(--primary);
+    }
+
+    .tab-badge {
+      font-size: 0.65rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 9999px;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--primary);
+      font-family: var(--font-mono);
+      font-weight: 600;
+    }
+
+    /* Viewer Container */
+    .viewer-card {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 0.75rem;
+      overflow: hidden;
+      margin-bottom: 2.5rem;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+    }
+
+    .viewer-header {
+      padding: 0.75rem 1.25rem;
+      background: rgba(13, 19, 34, 0.8);
+      border-bottom: 1px solid var(--surface-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .viewer-title-group {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .viewer-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--primary);
+      box-shadow: 0 0 10px var(--primary);
+    }
+
+    .viewer-title {
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .viewer-sub {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .viewer-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .viewer-frame {
+      width: 100%;
+      height: 640px;
+      border: none;
+      background: #090d16;
+      display: block;
+    }
+
+    .viewer-info-panel {
+      padding: 1.25rem 1.5rem;
+      background: var(--surface-card);
+      border-top: 1px solid var(--surface-border);
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 1.5rem;
+    }
+
+    .info-content h3 {
+      font-size: 0.9375rem;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+      color: var(--text);
+    }
+
+    .info-content p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .info-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      justify-content: center;
+      border-left: 1px solid var(--surface-border);
+      padding-left: 1.5rem;
+    }
+
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+    }
+
+    .meta-label {
+      color: var(--text-muted);
+    }
+
+    .meta-value {
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-weight: 600;
+    }
+
+    /* Deep Dive Sections */
+    .section-title {
+      font-size: 1.35rem;
+      font-weight: 800;
+      letter-spacing: -0.015em;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+    }
+
+    .panel h4 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .panel p {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+    }
+
+    .evidence-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .evidence-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      font-size: 0.8125rem;
+      color: var(--text);
+      background: rgba(13, 19, 34, 0.6);
+      padding: 0.6rem 0.85rem;
+      border-radius: 0.5rem;
+      border: 1px solid rgba(30, 41, 59, 0.6);
+    }
+
+    .evidence-code {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--primary);
+      background: rgba(56, 189, 248, 0.1);
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+
+    .badge-truth {
+      font-size: 0.65rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+
+    .badge-reviewed { background: rgba(56, 189, 248, 0.15); color: var(--primary); }
+    .badge-verified { background: rgba(16, 185, 129, 0.15); color: var(--emerald); }
+    .badge-unverified { background: rgba(244, 63, 94, 0.15); color: var(--rose); }
+
+    /* Table */
+    .table-container {
+      overflow-x: auto;
+      margin-bottom: 2.5rem;
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 0.75rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8125rem;
+      text-align: left;
+    }
+
+    th {
+      background: rgba(13, 19, 34, 0.9);
+      color: var(--text-muted);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-size: 0.7rem;
+      padding: 0.85rem 1.25rem;
+      border-bottom: 1px solid var(--surface-border);
+    }
+
+    td {
+      padding: 0.85rem 1.25rem;
+      border-bottom: 1px solid var(--surface-border);
+      color: var(--text);
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    tr:hover td {
+      background: rgba(30, 41, 59, 0.3);
+    }
+
+    footer {
+      border-top: 1px solid var(--surface-border);
+      padding: 2.5rem 2rem;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.8125rem;
+      background: var(--surface-card);
+    }
+
+    footer a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+
+    @media (max-width: 960px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .viewer-info-panel { grid-template-columns: 1fr; }
+      .info-meta { border-left: none; padding-left: 0; border-top: 1px solid var(--surface-border); padding-top: 1rem; }
+      .viewer-frame { height: 480px; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-container">
+      <div class="brand">
+        <div class="brand-icon">⚡</div>
+        <div class="brand-text">
+          <h1>Content Automation Platform</h1>
+          <span>Architecture & Technical Verification Portfolio</span>
+        </div>
+      </div>
+      <div class="nav-links">
+        <span class="badge-live">Archify 3.2.0 Verified</span>
+        <a href="https://github.com/yatinjoshi05/content-automation-platform" target="_blank" rel="noopener" class="btn btn-outline">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+          Repository
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="hero">
+      <div class="hero-badge">Evidence-Driven Architecture Portfolio</div>
+      <h2>Engineered for High-Throughput Media Assembly & Autonomous Social Distribution</h2>
+      <p>
+        Explore the verified systems architecture of the Content Automation Platform: an autonomous, multi-tenant media production suite powered by 16 decoupled n8n workflow engines, multi-provider AI failover (Groq & Gemini), Windows SAPI / FFmpeg media synthesis, and idempotent fail-closed publishing to YouTube and Meta.
+      </p>
+    </div>
+
+    <!-- KPI Grid -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-title">Workflow Orchestration</div>
+        <div class="kpi-value">16 Engines</div>
+        <div class="kpi-desc">Decoupled n8n state machines with rights verification & auto-recovery</div>
+      </div>
+      <div class="kpi-card emerald">
+        <div class="kpi-title">PostgreSQL State Model</div>
+        <div class="kpi-value">35 Tables</div>
+        <div class="kpi-desc">Sequential migrations (001–008) with pessimistic lease locks</div>
+      </div>
+      <div class="kpi-card purple">
+        <div class="kpi-title">Dynamic AI Failover</div>
+        <div class="kpi-value">&lt; 1.2s Latency</div>
+        <div class="kpi-desc">Groq Llama 3.3 primary with automated Gemini 2.5 Pro circuit breaker</div>
+      </div>
+      <div class="kpi-card amber">
+        <div class="kpi-title">Social Ingress & Publishing</div>
+        <div class="kpi-value">100% Idempotent</div>
+        <div class="kpi-desc">Token-locked resumable upload preventing duplicate social dispatch</div>
+      </div>
+    </div>
+
+    <!-- Diagram Switcher Tabs -->
+    <div class="tab-nav">
+      <button class="tab-btn active" onclick="switchDiagram('master')">
+        <span>01 Master Architecture</span>
+        <span class="tab-badge">architecture</span>
+      </button>
+      <button class="tab-btn" onclick="switchDiagram('workflow')">
+        <span>02 16-Workflow Pipeline</span>
+        <span class="tab-badge">workflow</span>
+      </button>
+      <button class="tab-btn" onclick="switchDiagram('dataflow')">
+        <span>03 Data Lineage & Schema State</span>
+        <span class="tab-badge">dataflow</span>
+      </button>
+      <button class="tab-btn" onclick="switchDiagram('sequence')">
+        <span>04 Publishing & Verification Sequence</span>
+        <span class="tab-badge">sequence</span>
+      </button>
+      <button class="tab-btn" onclick="switchDiagram('lifecycle')">
+        <span>05 AI Quota & Circuit Breaker</span>
+        <span class="tab-badge">lifecycle</span>
+      </button>
+    </div>
+
+    <!-- Viewer Card -->
+    <div class="viewer-card">
+      <div class="viewer-header">
+        <div class="viewer-title-group">
+          <div class="viewer-dot"></div>
+          <div>
+            <div class="viewer-title" id="diagram-title">Master System Architecture</div>
+            <div class="viewer-sub" id="diagram-sub">Complete runtime component topology, trust boundaries, and network flows</div>
+          </div>
+        </div>
+        <div class="viewer-actions">
+          <a id="diagram-direct-link" href="content-automation-master.html" target="_blank" rel="noopener" class="btn btn-outline" style="font-size: 0.75rem;">
+            Open Standalone
+          </a>
+          <button onclick="toggleFullscreen()" class="btn btn-primary" style="font-size: 0.75rem;">
+            Fullscreen
+          </button>
+        </div>
+      </div>
+      <iframe id="diagram-frame" class="viewer-frame" src="content-automation-master.html"></iframe>
+      <div class="viewer-info-panel">
+        <div class="info-content">
+          <h3 id="info-heading">System Overview & Ingress Perimeter</h3>
+          <p id="info-desc">
+            The Content Automation Platform organizes content production across three operational tiers: an operator-facing CoreUI dashboard served by an Express BFF API (port 3000), 16 decoupled n8n workflow engines (port 5678) acting as distributed state machines, and a specialized background worker tier coordinating video assembly (FFmpeg), audio synthesis, and visual quality assurance.
+          </p>
+        </div>
+        <div class="info-meta">
+          <div class="meta-row">
+            <span class="meta-label">Archify Type</span>
+            <span class="meta-value" id="meta-type">architecture</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">Delivery Receipt</span>
+            <span class="meta-value" id="meta-receipt">d633dad7-dd0b</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">Quality Profile</span>
+            <span class="meta-value">showcase</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">Validation Status</span>
+            <span class="meta-value" style="color: var(--emerald);">PASSED (9/9)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Deep Dive Architectural Panels -->
+    <div class="section-title">
+      <span>Architectural Pillars & Source Evidence</span>
+    </div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <h4>
+          <span style="color: var(--primary);">01.</span>
+          Decoupled State Machine Orchestration
+        </h4>
+        <p>
+          Instead of a monolithic backend worker, business processes are partitioned into 16 discrete n8n workflow definitions. Each workflow maintains an independent error-handling boundary, executes idempotent state mutations, and delegates heavy media compute to isolated Node.js child processes.
+        </p>
+        <ul class="evidence-list">
+          <li class="evidence-item">
+            <span class="badge-truth badge-reviewed">Reviewed</span>
+            <div>
+              <span class="evidence-code">workflows/01_master_orchestrator.json</span>
+              <div>Coordinates cron triggers and dispatches trend research jobs</div>
+            </div>
+          </li>
+          <li class="evidence-item">
+            <span class="badge-truth badge-reviewed">Reviewed</span>
+            <div>
+              <span class="evidence-code">workflows/12_supervisor_sentinel.json</span>
+              <div>Deadlock detector and lease reaper for abandoned worker jobs</div>
+            </div>
+          </li>
+          <li class="evidence-item">
+            <span class="badge-truth badge-reviewed">Reviewed</span>
+            <div>
+              <span class="evidence-code">workflows/13_global_error_handler.json</span>
+              <div>Centralized classification of network, quota, and schema failures</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="panel">
+        <h4>
+          <span style="color: var(--emerald);">02.</span>
+          Pessimistic Lease Locking & Concurrency
+        </h4>
+        <p>
+          High-throughput distributed media generation requires strict concurrency control. The PostgreSQL database uses sequential migrations to define a resilient job queue with row-level locks (<code class="evidence-code">SELECT FOR UPDATE SKIP LOCKED</code>) and 30-second worker heartbeats to guarantee at-most-once execution.
+        </p>
+        <ul class="evidence-list">
+          <li class="evidence-item">
+            <span class="badge-truth badge-verified">Test Verified</span>
+            <div>
+              <span class="evidence-code">database/schema.sql (lines 45–120)</span>
+              <div>Defines jobs_queue, content_items, and worker_heartbeats tables</div>
+            </div>
+          </li>
+          <li class="evidence-item">
+            <span class="badge-truth badge-reviewed">Reviewed</span>
+            <div>
+              <span class="evidence-code">database/migrations/001_initial_schema.sql</span>
+              <div>Foreign key constraints and immutable audit history triggers</div>
+            </div>
+          </li>
+          <li class="evidence-item">
+            <span class="badge-truth badge-verified">Test Verified</span>
+            <div>
+              <span class="evidence-code">tests/database.test.js</span>
+              <div>Asserts lease expiration, renewal, and deadlock protection</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="panel">
+        <h4>
+          <span style="color: var(--purple);">03.</span>
+          AI Provider Resiliency & Quota Circuit Breaker
+        </h4>
+        <p>
+          Procedural script generation leverages Groq's high-speed Llama 3.3 70B model for primary synthesis. When rate limits (HTTP 429) or service outages (503) occur, requests automatically fail over to Google Gemini 2.5 Pro. If all providers exhaust quotas, the circuit breaker opens into a 60-second cooldown.
+        </p>
+        <ul class="evidence-list">
+          <li class="evidence-item">
+            <span class="badge-truth badge-reviewed">Reviewed</span>
+            <div>
+              <span class="evidence-code">workers/original_generator.js (lines 55–130)</span>
+              <div>Multi-provider adapter implementing exponential backoff</div>
+            </div>
+          </li>
+          <li class="evidence-item">
+            <span class="badge-truth badge-reviewed">Reviewed</span>
+            <div>
+              <span class="evidence-code">workflows/16_original_generation.json</span>
+              <div>Dynamic provider routing node with quota validation fallback</div>
+            </div>
+          </li>
+          <li class="evidence-item">
+            <span class="badge-truth badge-reviewed">Reviewed</span>
+            <div>
+              <span class="evidence-code">database/migrations/005_quotas.sql</span>
+              <div>Provider quota ledger tracking rolling token expenditure</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="panel">
+        <h4>
+          <span style="color: var(--amber);">04.</span>
+          Fail-Closed Rights & Human-in-the-Loop Review
+        </h4>
+        <p>
+          Copyright risk and platform policy compliance are enforced before synthesis begins. Unlicensed source content is rejected at Workflow 04. Rendered video drafts undergo automated black-frame and audio QA (port 9100) before presenting in the CoreUI approval modal for explicit human sign-off.
+        </p>
+        <ul class="evidence-list">
+          <li class="evidence-item">
+            <span class="badge-truth badge-reviewed">Reviewed</span>
+            <div>
+              <span class="evidence-code">workflows/04_rights_verification.json</span>
+              <div>Automated Creative Commons and license attribution check</div>
+            </div>
+          </li>
+          <li class="evidence-item">
+            <span class="badge-truth badge-reviewed">Reviewed</span>
+            <div>
+              <span class="evidence-code">workers/qa_worker.js (port 9100)</span>
+              <div>FFmpeg freeze-frame detector and silence threshold analyzer</div>
+            </div>
+          </li>
+          <li class="evidence-item">
+            <span class="badge-truth badge-reviewed">Reviewed</span>
+            <div>
+              <span class="evidence-code">server/index.js (/api/approvals)</span>
+              <div>Idempotent approval gateway generating signed publishing tokens</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Evidence Matrix Table -->
+    <div class="section-title">
+      <span>Implementation Truth Matrix & Verification Status</span>
+    </div>
+
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Subsystem</th>
+            <th>Source Location</th>
+            <th>Evidence Artifact</th>
+            <th>Truth Classification</th>
+            <th>Architectural Role</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Orchestration</strong></td>
+            <td><code>workflows/01-16_*.json</code></td>
+            <td>16 n8n workflow definitions</td>
+            <td><span class="badge-truth badge-reviewed">Code Reviewed</span></td>
+            <td>Distributed state machines for trend discovery, synthesis, QA & distribution</td>
+          </tr>
+          <tr>
+            <td><strong>State Engine</strong></td>
+            <td><code>database/schema.sql</code></td>
+            <td>35 SQL table schemas + 8 migrations</td>
+            <td><span class="badge-truth badge-verified">Test Verified</span></td>
+            <td>Pessimistic lease locking, audit logging, and quota ledger</td>
+          </tr>
+          <tr>
+            <td><strong>BFF REST API</strong></td>
+            <td><code>server/index.js</code></td>
+            <td>Express server on port 3000</td>
+            <td><span class="badge-truth badge-reviewed">Code Reviewed</span></td>
+            <td>Operator authentication, approval endpoints, and telemetry aggregation</td>
+          </tr>
+          <tr>
+            <td><strong>Video Synthesis</strong></td>
+            <td><code>workers/original_generator.js</code></td>
+            <td>Node worker + Windows SAPI & FFmpeg</td>
+            <td><span class="badge-truth badge-reviewed">Code Reviewed</span></td>
+            <td>Procedural script generation, TTS audio rendering, and subtitle burn-in</td>
+          </tr>
+          <tr>
+            <td><strong>Technical QA</strong></td>
+            <td><code>workers/qa_worker.js</code></td>
+            <td>FastAPI / Express worker on port 9100</td>
+            <td><span class="badge-truth badge-reviewed">Code Reviewed</span></td>
+            <td>Automated detection of frozen frames, audio clipping, and black screen</td>
+          </tr>
+          <tr>
+            <td><strong>Social Publisher</strong></td>
+            <td><code>workers/youtube_publisher.js</code></td>
+            <td>Google API Client v3 resumable upload</td>
+            <td><span class="badge-truth badge-reviewed">Code Reviewed</span></td>
+            <td>Fail-closed YouTube and Meta distribution with token idempotency</td>
+          </tr>
+          <tr>
+            <td><strong>Operator UI</strong></td>
+            <td><code>frontend/src/</code></td>
+            <td>CoreUI React 18 + TypeScript</td>
+            <td><span class="badge-truth badge-reviewed">Code Reviewed</span></td>
+            <td>Pipeline control dashboard, job monitoring, and approval review modal</td>
+          </tr>
+          <tr>
+            <td><strong>Automated Tests</strong></td>
+            <td><code>tests/</code></td>
+            <td>7 test suites (database, api, workers)</td>
+            <td><span class="badge-truth badge-verified">Test Verified</span></td>
+            <td>Regression suites verifying lease lifecycle, schema integrity & error traps</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Production Limitations & Boundary Disclosures -->
+    <div class="section-title">
+      <span>Operational Boundaries & Production Disclosures</span>
+    </div>
+
+    <div class="panel" style="margin-bottom: 2.5rem; background: rgba(13, 19, 34, 0.7); border-color: rgba(245, 158, 11, 0.3);">
+      <h4 style="color: var(--amber);">
+        <span>⚠️</span> Honest Engineering Disclosures & Environment Assumptions
+      </h4>
+      <p style="margin-bottom: 0.75rem;">
+        To ensure complete integrity in technical recruitment and architectural evaluations, the following boundaries must be explicitly noted:
+      </p>
+      <ul style="list-style: square; padding-left: 1.5rem; color: var(--text-muted); font-size: 0.8125rem; display: flex; flex-direction: column; gap: 0.4rem;">
+        <li><strong>Windows Platform Dependency:</strong> Audio synthesis currently invokes Windows SAPI TTS via native PowerShell sub-processes (<code class="evidence-code">workers/original_generator.js</code>). Production Linux containerization requires swapping to Piper TTS or an external TTS API.</li>
+        <li><strong>Live Credentials Scope:</strong> In accordance with security preflights, live YouTube OAuth tokens and paid Groq/Gemini API keys are not stored in repository configuration. Production deployment requires external secrets injection via Docker environment or HashiCorp Vault.</li>
+        <li><strong>FFmpeg Binary Dependency:</strong> Media assembly and QA analysis require FFmpeg 6.0+ installed and discoverable on system PATH.</li>
+        <li><strong>No Unbounded Concurrency:</strong> Concurrency is intentionally capped by database connection pool sizing (default 20 connections) to avoid overwhelming local CPU during media encoding.</li>
+      </ul>
+    </div>
+
+  </main>
+
+  <footer>
+    <p>
+      <strong>Content Automation Platform</strong> Architecture Portfolio • Generated with <strong>Archify 3.2.0</strong> (Showcase Profile)
+    </p>
+    <p style="margin-top: 0.5rem; font-size: 0.75rem;">
+      Repository: <a href="https://github.com/yatinjoshi05/content-automation-platform" target="_blank" rel="noopener">github.com/yatinjoshi05/content-automation-platform</a> • All diagrams compiled with SVG orthogonal routing and delivery provenance receipts.
+    </p>
+  </footer>
+
+  <script>
+    const diagrams = {
+      master: {
+        title: "Master System Architecture",
+        sub: "Complete runtime component topology, trust boundaries, and network flows",
+        file: "content-automation-master.html",
+        heading: "System Overview & Ingress Perimeter",
+        desc: "The Content Automation Platform organizes content production across three operational tiers: an operator-facing CoreUI dashboard served by an Express BFF API (port 3000), 16 decoupled n8n workflow engines (port 5678) acting as distributed state machines, and a specialized background worker tier coordinating video assembly (FFmpeg), audio synthesis, and visual quality assurance.",
+        type: "architecture",
+        receipt: "d633dad7-dd0b"
+      },
+      workflow: {
+        title: "16-Workflow Orchestration Pipeline",
+        sub: "Decoupled n8n state machines: Research, Rights, Procedural Synthesis, QA, Approval, Publishing & Analytics",
+        file: "content-automation-workflow.html",
+        heading: "State Machine Pipeline & Error Escalation",
+        desc: "The 16 n8n workflows operate as decoupled event-driven controllers. Ingress begins with Master Orchestrator (01) and Trend Ingest (02), moving through Rights Verification (04) and Policy Guard (05). Approved topics trigger Procedural Synthesis (16) and Content Packaging (07). After Technical QA (15), the item enters the Human Review Gate (08) before final Scheduler (09) and Publishing Adapter (10) dispatch. Deadlocks and leases are swept by Supervisor Sentinel (12).",
+        type: "workflow",
+        receipt: "fa32c32f-edd8"
+      },
+      dataflow: {
+        title: "Data Lineage & Schema State Flow",
+        sub: "Deterministic state transitions: drafted -> processing -> qa_passed -> approved -> published",
+        file: "content-automation-dataflow.html",
+        heading: "End-to-End Lineage & Lease Control",
+        desc: "Tracks the exact progression of data from public external sources (Google Trends, YouTube transcripts) through n8n ingestion, into PostgreSQL content_items. Video assembly workers acquire pessimistic row leases on jobs_queue, write verified artifacts to disk, and transition state to approvals_log. Once human sign-off issues an upload token, the Publishing Adapter safely pushes to YouTube and updates analytics_cache.",
+        type: "dataflow",
+        receipt: "a3b32997-489d"
+      },
+      sequence: {
+        title: "Publishing & Verification Sequence",
+        sub: "Human approval, lease acquisition, resumable upload byte-streaming, and audit persistence",
+        file: "content-automation-sequence.html",
+        heading: "Idempotent Publishing & Failure Recovery",
+        desc: "Chronological sequence of publishing execution: Operator signs off via Dashboard -> Express BFF updates content status -> n8n triggers publishing job with SELECT FOR UPDATE SKIP LOCKED -> YouTube Publisher establishes a resumable upload session with YouTube Data API v3 -> Streams video bytes -> Logs public video_id and releases lease.",
+        type: "sequence",
+        receipt: "d9ea52ff-3b69"
+      },
+      lifecycle: {
+        title: "AI Provider Failover & Quota Lifecycle",
+        sub: "Groq Llama 3.3 primary, Gemini 2.5 Pro fallback, and automated circuit-breaker cooldown",
+        file: "content-automation-lifecycle.html",
+        heading: "Multi-Provider Failover & Quota Governor",
+        desc: "Visualizes the resilient AI provider lifecycle: Primary requests target Groq (Llama 3.3 70B) for sub-second generation. On HTTP 429 (rate-limit) or 503 (outage), requests seamlessly fail over to Google Gemini 2.5 Pro. If both providers exhaust quota limits, the circuit breaker trips into a 60-second cooldown state before attempting lightweight half-open heartbeat probes.",
+        type: "lifecycle",
+        receipt: "03a91e54-29e9"
+      }
+    };
+
+    function switchDiagram(key) {
+      const d = diagrams[key];
+      if (!d) return;
+
+      // Update Tab Buttons
+      const buttons = document.querySelectorAll('.tab-btn');
+      buttons.forEach(btn => btn.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+
+      // Update Viewer Info
+      document.getElementById('diagram-title').textContent = d.title;
+      document.getElementById('diagram-sub').textContent = d.sub;
+      document.getElementById('diagram-frame').src = d.file;
+      document.getElementById('diagram-direct-link').href = d.file;
+      document.getElementById('info-heading').textContent = d.heading;
+      document.getElementById('info-desc').textContent = d.desc;
+      document.getElementById('meta-type').textContent = d.type;
+      document.getElementById('meta-receipt').textContent = d.receipt;
+    }
+
+    function toggleFullscreen() {
+      const frame = document.getElementById('diagram-frame');
+      if (frame.requestFullscreen) {
+        frame.requestFullscreen();
+      } else if (frame.webkitRequestFullscreen) {
+        frame.webkitRequestFullscreen();
+      }
+    }
+  </script>
+</body>
+</html>

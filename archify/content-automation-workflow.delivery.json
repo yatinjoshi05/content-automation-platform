@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "fa32c32f-edd8-44f6-be44-c76536a6c0a2",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\.archify\\workflow\\candidate.json",
+  "output": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-workflow.html",
+  "specification": {
+    "sha256": "c201bdcc7459dab2af955214138be31c2a4cc90bd6a33a60661f8f4d84e74434",
+    "bytes": 6404
+  },
+  "artifact": {
+    "sha256": "a1a55fc9509f1270018fdd00e84e10160f83607659cf867b18b0ee7896114caa",
+    "bytes": 866748
+  }
+}

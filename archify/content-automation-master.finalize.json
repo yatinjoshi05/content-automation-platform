@@ -1,0 +1,689 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "command": "finalize",
+  "status": "fail",
+  "type": "architecture",
+  "quality": "showcase",
+  "startedAt": "2026-10-28T09:52:53.410Z",
+  "specification": {
+    "path": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\.archify\\master-arch\\candidate.json",
+    "sha256": "16ed5076330fe74e46bf28570fddf5f8bd41073476afd15842ef2aba18cca64c",
+    "bytes": 10112
+  },
+  "artifact": {
+    "path": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-master.html",
+    "sha256": "eebdcd8532a7529058cb3ce6f58a4ab6056f8807a2e62730c8e982de32871c41",
+    "bytes": 888368
+  },
+  "stages": {
+    "validate": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": null,
+      "execution": "embedded-in-deliver",
+      "command": [
+        "C:\\nvm4w\\nodejs\\node.exe",
+        "C:\\Users\\H\\.gemini\\antigravity-ide\\brain\\9e89b804-6d01-4a93-98e7-233441fe5c0b\\scratch\\archify-repo\\archify\\bin\\archify.mjs",
+        "deliver",
+        "architecture",
+        "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\.archify\\master-arch\\candidate.json",
+        "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-master.html",
+        "--quality",
+        "showcase",
+        "--json"
+      ],
+      "receipt": {
+        "schemaVersion": 1,
+        "ok": true,
+        "command": "validate",
+        "specification": {
+          "sha256": "16ed5076330fe74e46bf28570fddf5f8bd41073476afd15842ef2aba18cca64c",
+          "bytes": 10112
+        },
+        "validation": {
+          "checksPassed": 9,
+          "checkCount": 9,
+          "compositionProfile": "showcase",
+          "compositionStatus": "pass",
+          "errors": 0,
+          "warnings": 0
+        }
+      }
+    },
+    "deliver": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 3853,
+      "command": [
+        "C:\\nvm4w\\nodejs\\node.exe",
+        "C:\\Users\\H\\.gemini\\antigravity-ide\\brain\\9e89b804-6d01-4a93-98e7-233441fe5c0b\\scratch\\archify-repo\\archify\\bin\\archify.mjs",
+        "deliver",
+        "architecture",
+        "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\.archify\\master-arch\\candidate.json",
+        "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-master.html",
+        "--quality",
+        "showcase",
+        "--json"
+      ],
+      "receipt": {
+        "schemaVersion": 1,
+        "receiptId": "d633dad7-dd0b-46ae-b58f-e34b9573d952",
+        "ok": true,
+        "command": "deliver",
+        "type": "architecture",
+        "input": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\.archify\\master-arch\\candidate.json",
+        "output": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-master.html",
+        "specification": {
+          "sha256": "16ed5076330fe74e46bf28570fddf5f8bd41073476afd15842ef2aba18cca64c",
+          "bytes": 10112
+        },
+        "artifact": {
+          "sha256": "eebdcd8532a7529058cb3ce6f58a4ab6056f8807a2e62730c8e982de32871c41",
+          "bytes": 888368
+        },
+        "validation": {
+          "checksPassed": 9,
+          "checkCount": 9,
+          "compositionProfile": "showcase",
+          "compositionStatus": "pass",
+          "errors": 0,
+          "warnings": 0
+        },
+        "update": {
+          "status": "unavailable",
+          "installedVersion": null,
+          "availableVersion": null,
+          "releaseNotes": null,
+          "checkedAt": null,
+          "source": null,
+          "noticeRequired": false,
+          "noticeText": null,
+          "reason": "disabled"
+        }
+      }
+    },
+    "check": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 3094,
+      "command": [
+        "C:\\nvm4w\\nodejs\\node.exe",
+        "C:\\Users\\H\\.gemini\\antigravity-ide\\brain\\9e89b804-6d01-4a93-98e7-233441fe5c0b\\scratch\\archify-repo\\archify\\bin\\archify.mjs",
+        "check",
+        "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-master.html",
+        "--require-provenance"
+      ],
+      "receipt": {
+        "ok": true,
+        "file": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-master.html",
+        "artifact": {
+          "sha256": "eebdcd8532a7529058cb3ce6f58a4ab6056f8807a2e62730c8e982de32871c41",
+          "bytes": 888368
+        },
+        "checks": [
+          {
+            "name": "single_svg",
+            "ok": true,
+            "details": [
+              "found 1 <svg> block(s)"
+            ]
+          },
+          {
+            "name": "finite_svg",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "orthogonal_arrows",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "label_route_clearance",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "relationship_crossings",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "relationship_corridors",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "container_border_runs",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "route_rhythm",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "legend_clearance",
+            "ok": true,
+            "details": []
+          }
+        ],
+        "composition": {
+          "schemaVersion": 1,
+          "profile": "showcase",
+          "status": "pass",
+          "summary": {
+            "errors": 0,
+            "warnings": 0
+          },
+          "metrics": {
+            "properCrossings": 0,
+            "resolvedCrossovers": 12,
+            "ambiguousCorridors": 0,
+            "arrowheadCollisions": 0,
+            "containerBorderRuns": 0,
+            "labelRouteClearanceIssues": 0,
+            "labelCanvasOverflowIssues": 0,
+            "minLabelRouteClearance": 5,
+            "desktopReadabilityIssues": 0,
+            "viewportHeightIssues": 0,
+            "minProjectedNodeTextPx": 6,
+            "maxBends": 5,
+            "routesOverSuggestedBends": 4,
+            "maxStretch": 1.484,
+            "routesOverSuggestedStretch": 1,
+            "minSegmentPx": 15,
+            "minInteriorSegmentPx": 24,
+            "shortSegmentCount": 2,
+            "shortEndpointSegmentCount": 2,
+            "shortInteriorSegmentCount": 0,
+            "microSegmentCount": 0
+          },
+          "suggestedLimits": {
+            "bendsPerRelationship": 2,
+            "stretch": 1.35,
+            "segmentPx": 16,
+            "microSegmentPx": 8
+          },
+          "routeReview": {
+            "crossings": [
+              {
+                "left": {
+                  "id": "c_pipe_gemini",
+                  "from": "workflow_pipeline",
+                  "to": "gemini_fallback",
+                  "label": "failover on 429",
+                  "collectionIndex": 4,
+                  "artifactIndex": 5
+                },
+                "right": {
+                  "id": "c_pipe_db",
+                  "from": "workflow_pipeline",
+                  "to": "postgres_state",
+                  "label": "enqueue job",
+                  "collectionIndex": 5,
+                  "artifactIndex": 6
+                },
+                "point": [
+                  626,
+                  242
+                ],
+                "sharedNode": "workflow_pipeline"
+              },
+              {
+                "left": {
+                  "id": "c_pipe_gemini",
+                  "from": "workflow_pipeline",
+                  "to": "gemini_fallback",
+                  "label": "failover on 429",
+                  "collectionIndex": 4,
+                  "artifactIndex": 5
+                },
+                "right": {
+                  "id": "c_bff_db",
+                  "from": "bff_server",
+                  "to": "postgres_state",
+                  "label": "state queries",
+                  "collectionIndex": 9,
+                  "artifactIndex": 10
+                },
+                "point": [
+                  626,
+                  194
+                ]
+              },
+              {
+                "left": {
+                  "id": "c_pipe_db",
+                  "from": "workflow_pipeline",
+                  "to": "postgres_state",
+                  "label": "enqueue job",
+                  "collectionIndex": 5,
+                  "artifactIndex": 6
+                },
+                "right": {
+                  "id": "c_bff_db",
+                  "from": "bff_server",
+                  "to": "postgres_state",
+                  "label": "state queries",
+                  "collectionIndex": 9,
+                  "artifactIndex": 10
+                },
+                "point": [
+                  510,
+                  194
+                ],
+                "sharedNode": "postgres_state"
+              },
+              {
+                "left": {
+                  "id": "c_gen_qa",
+                  "from": "worker_generator",
+                  "to": "qa_sentinel",
+                  "label": "POST /qa/inspect",
+                  "collectionIndex": 7,
+                  "artifactIndex": 8
+                },
+                "right": {
+                  "id": "c_telemetry_db",
+                  "from": "telemetry_agent",
+                  "to": "postgres_state",
+                  "label": "resource stats",
+                  "collectionIndex": 10,
+                  "artifactIndex": 11
+                },
+                "point": [
+                  510,
+                  375
+                ]
+              },
+              {
+                "left": {
+                  "id": "c_qa_db",
+                  "from": "qa_sentinel",
+                  "to": "postgres_state",
+                  "label": "record QA verdict",
+                  "collectionIndex": 8,
+                  "artifactIndex": 9
+                },
+                "right": {
+                  "id": "c_telemetry_db",
+                  "from": "telemetry_agent",
+                  "to": "postgres_state",
+                  "label": "resource stats",
+                  "collectionIndex": 10,
+                  "artifactIndex": 11
+                },
+                "point": [
+                  937.5,
+                  375
+                ],
+                "sharedNode": "postgres_state"
+              },
+              {
+                "left": {
+                  "id": "c_qa_db",
+                  "from": "qa_sentinel",
+                  "to": "postgres_state",
+                  "label": "record QA verdict",
+                  "collectionIndex": 8,
+                  "artifactIndex": 9
+                },
+                "right": {
+                  "id": "c_sentinel_db",
+                  "from": "error_sentinel",
+                  "to": "postgres_state",
+                  "label": "stale sweep",
+                  "collectionIndex": 11,
+                  "artifactIndex": 12
+                },
+                "point": [
+                  923.5,
+                  384
+                ],
+                "sharedNode": "postgres_state"
+              },
+              {
+                "left": {
+                  "id": "c_qa_db",
+                  "from": "qa_sentinel",
+                  "to": "postgres_state",
+                  "label": "record QA verdict",
+                  "collectionIndex": 8,
+                  "artifactIndex": 9
+                },
+                "right": {
+                  "id": "c_pub_db",
+                  "from": "publisher_service",
+                  "to": "postgres_state",
+                  "label": "lock schedule",
+                  "collectionIndex": 12,
+                  "artifactIndex": 13
+                },
+                "point": [
+                  909.4999999999995,
+                  384
+                ],
+                "sharedNode": "postgres_state"
+              },
+              {
+                "left": {
+                  "id": "c_telemetry_db",
+                  "from": "telemetry_agent",
+                  "to": "postgres_state",
+                  "label": "resource stats",
+                  "collectionIndex": 10,
+                  "artifactIndex": 11
+                },
+                "right": {
+                  "id": "c_sentinel_db",
+                  "from": "error_sentinel",
+                  "to": "postgres_state",
+                  "label": "stale sweep",
+                  "collectionIndex": 11,
+                  "artifactIndex": 12
+                },
+                "point": [
+                  923.5,
+                  375
+                ],
+                "sharedNode": "postgres_state"
+              },
+              {
+                "left": {
+                  "id": "c_telemetry_db",
+                  "from": "telemetry_agent",
+                  "to": "postgres_state",
+                  "label": "resource stats",
+                  "collectionIndex": 10,
+                  "artifactIndex": 11
+                },
+                "right": {
+                  "id": "c_pub_db",
+                  "from": "publisher_service",
+                  "to": "postgres_state",
+                  "label": "lock schedule",
+                  "collectionIndex": 12,
+                  "artifactIndex": 13
+                },
+                "point": [
+                  909.4999999999997,
+                  375
+                ],
+                "sharedNode": "postgres_state"
+              },
+              {
+                "left": {
+                  "id": "c_sentinel_db",
+                  "from": "error_sentinel",
+                  "to": "postgres_state",
+                  "label": "stale sweep",
+                  "collectionIndex": 11,
+                  "artifactIndex": 12
+                },
+                "right": {
+                  "id": "c_pub_yt",
+                  "from": "publisher_service",
+                  "to": "youtube_api",
+                  "label": "byte upload",
+                  "collectionIndex": 13,
+                  "artifactIndex": 14
+                },
+                "point": [
+                  733.4,
+                  481
+                ]
+              },
+              {
+                "left": {
+                  "id": "c_sentinel_db",
+                  "from": "error_sentinel",
+                  "to": "postgres_state",
+                  "label": "stale sweep",
+                  "collectionIndex": 11,
+                  "artifactIndex": 12
+                },
+                "right": {
+                  "id": "c_pub_meta",
+                  "from": "publisher_service",
+                  "to": "meta_reels",
+                  "label": "reels publish",
+                  "collectionIndex": 14,
+                  "artifactIndex": 15
+                },
+                "point": [
+                  923.5,
+                  438
+                ]
+              },
+              {
+                "left": {
+                  "id": "c_pub_yt",
+                  "from": "publisher_service",
+                  "to": "youtube_api",
+                  "label": "byte upload",
+                  "collectionIndex": 13,
+                  "artifactIndex": 14
+                },
+                "right": {
+                  "id": "c_pub_meta",
+                  "from": "publisher_service",
+                  "to": "meta_reels",
+                  "label": "reels publish",
+                  "collectionIndex": 14,
+                  "artifactIndex": 15
+                },
+                "point": [
+                  1047,
+                  438
+                ],
+                "sharedNode": "publisher_service"
+              }
+            ],
+            "detours": [
+              {
+                "relationship": {
+                  "id": "c_qa_db",
+                  "from": "qa_sentinel",
+                  "to": "postgres_state",
+                  "label": "record QA verdict",
+                  "collectionIndex": 8,
+                  "artifactIndex": 9
+                },
+                "bends": 3,
+                "stretch": 1
+              },
+              {
+                "relationship": {
+                  "id": "c_bff_db",
+                  "from": "bff_server",
+                  "to": "postgres_state",
+                  "label": "state queries",
+                  "collectionIndex": 9,
+                  "artifactIndex": 10
+                },
+                "bends": 4,
+                "stretch": 1
+              },
+              {
+                "relationship": {
+                  "id": "c_sentinel_db",
+                  "from": "error_sentinel",
+                  "to": "postgres_state",
+                  "label": "stale sweep",
+                  "collectionIndex": 11,
+                  "artifactIndex": 12
+                },
+                "bends": 5,
+                "stretch": 1.484
+              },
+              {
+                "relationship": {
+                  "id": "c_pub_yt",
+                  "from": "publisher_service",
+                  "to": "youtube_api",
+                  "label": "byte upload",
+                  "collectionIndex": 13,
+                  "artifactIndex": 14
+                },
+                "bends": 4,
+                "stretch": 1.079
+              }
+            ]
+          },
+          "leadingSpace": {
+            "measured": false,
+            "reviewSuggested": false
+          },
+          "desktopReadability": {
+            "budgetBasis": "legacy-930",
+            "readerContract": "declared-wide-v1",
+            "availableDiagramWidth": 930,
+            "actualBudgetPx": 930,
+            "limit": "legacy",
+            "requestedTargetPx": null,
+            "requestedTargetMet": null,
+            "hardFloorPx": 6,
+            "hardFloorMet": true,
+            "minimumOwner": {
+              "kind": "edge",
+              "id": "c_dash_bff",
+              "from": "dashboard_ui",
+              "to": "bff_server"
+            },
+            "minimumSourceTextPx": 8,
+            "minimumProjectedTextPx": 6,
+            "semanticTextCount": 45
+          },
+          "issues": []
+        },
+        "provenance": "current",
+        "deliveryReceiptId": "d633dad7-dd0b-46ae-b58f-e34b9573d952"
+      }
+    },
+    "browser-check": {
+      "status": "fail",
+      "exitCode": 1,
+      "durationMs": 10679,
+      "command": [
+        "C:\\nvm4w\\nodejs\\node.exe",
+        "C:\\Users\\H\\.gemini\\antigravity-ide\\brain\\9e89b804-6d01-4a93-98e7-233441fe5c0b\\scratch\\archify-repo\\archify\\bin\\archify.mjs",
+        "browser-check",
+        "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-master.html",
+        "--json",
+        "--require-provenance"
+      ],
+      "execution": "in-process",
+      "receipt": {
+        "schemaVersion": 1,
+        "ok": false,
+        "command": "browser-check",
+        "evidenceKind": "automated-browser",
+        "status": "fail",
+        "visualReview": "not-requested",
+        "provenance": "current",
+        "deliveryReceiptId": "d633dad7-dd0b-46ae-b58f-e34b9573d952",
+        "artifact": {
+          "path": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-master.html",
+          "sha256": "eebdcd8532a7529058cb3ce6f58a4ab6056f8807a2e62730c8e982de32871c41",
+          "bytes": 888368
+        },
+        "state": {
+          "detail": "read",
+          "motion": "still"
+        },
+        "chrome": {
+          "status": "available",
+          "executable": "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"
+        },
+        "diagnostics": [
+          {
+            "code": "viewer/temp-cleanup-incomplete",
+            "severity": "error",
+            "message": "Browser cleanup could not safely finish; inspect the reported retained path.",
+            "subject": {
+              "artifact": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-master.html"
+            },
+            "evidence": {
+              "reason": "Chrome did not exit; retained temporary profile \"C:\\Users\\H\\AppData\\Local\\Temp\\archify-visual-check-profile-ApdkhA\".",
+              "retainedDirectory": "C:\\Users\\H\\AppData\\Local\\Temp\\archify-visual-check-profile-ApdkhA"
+            },
+            "supportedFixes": [
+              "resolve the reported process or filesystem failure; verify directory ownership before manual cleanup"
+            ]
+          }
+        ],
+        "containment": {
+          "status": "fail",
+          "policy": "fit-or-reader-declared-readable-vertical-scroll",
+          "viewports": []
+        },
+        "themeStates": {
+          "status": "fail",
+          "viewports": []
+        },
+        "readability": {
+          "status": "fail",
+          "minimumProjectedNodeTextPx": 6,
+          "viewports": []
+        },
+        "viewerChrome": {
+          "status": "fail",
+          "viewports": []
+        },
+        "captures": {
+          "status": "not-requested",
+          "screenshots": [],
+          "contactSheet": null
+        },
+        "sidecars": {
+          "receipt": "content-automation-master.browser-check.json",
+          "files": []
+        },
+        "error": "Chrome did not exit; retained temporary profile \"C:\\Users\\H\\AppData\\Local\\Temp\\archify-visual-check-profile-ApdkhA\"."
+      }
+    }
+  },
+  "browserCheck": {
+    "requested": true,
+    "ran": false
+  },
+  "diagnostics": [
+    {
+      "code": "viewer/temp-cleanup-incomplete",
+      "severity": "error",
+      "message": "Browser cleanup could not safely finish; inspect the reported retained path.",
+      "subject": {
+        "artifact": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-master.html"
+      },
+      "evidence": {
+        "reason": "Chrome did not exit; retained temporary profile \"C:\\Users\\H\\AppData\\Local\\Temp\\archify-visual-check-profile-ApdkhA\".",
+        "retainedDirectory": "C:\\Users\\H\\AppData\\Local\\Temp\\archify-visual-check-profile-ApdkhA"
+      },
+      "supportedFixes": [
+        "resolve the reported process or filesystem failure; verify directory ownership before manual cleanup"
+      ]
+    }
+  ],
+  "evidence": {
+    "receipt": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-master.finalize.json",
+    "summaryReceipt": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-master.finalize-summary.json",
+    "browserCheckReceipt": "C:\\Users\\H\\Downloads\\yt studio\\FINAL_REPAIRED_N8N_WORKFLOWS\\CONTENT_AUTOMATION\\archify\\content-automation-master.browser-check.json"
+  },
+  "visualReview": "not-requested",
+  "failedStage": "browser-check",
+  "finishedAt": "2026-10-28T09:53:13.861Z",
+  "durationMs": 20450,
+  "update": {
+    "status": "current",
+    "installedVersion": "3.2.0",
+    "availableVersion": "3.2.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-10-28T07:48:24.353Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  }
+}
